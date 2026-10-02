@@ -49,15 +49,19 @@ On PowerShell, use `Copy-Item .env.example .env` instead of `cp` if desired.
 The development URL is printed by the server, normally http://127.0.0.1:5173.
 The `.env` file is ignored by Git. Never use a `NEXT_PUBLIC_` prefix for credentials.
 
-The current hosted distribution uses platform-owned Sign in with ChatGPT solely
-for authentication. It does not call any AI API. Loopback development provides
+The former ChatGPT-hosted Site was permanently deleted by the owner on
+2026-10-02. This checkout is local-only and has no hosting registration. Do not
+create or publish a replacement ChatGPT Site.
+
+The legacy sign-in adapter is retained for the working local preview. It does
+not call any AI API. Loopback development provides
 an isolated local sign-in through `/signin-with-chatgpt?return_to=/` and a sign-out
 through `/signout-with-chatgpt?return_to=/`. This development identity is excluded
 from the production build.
 
 For an independent deployment, connect an authentication provider at
 `app/chatgpt-auth.ts` and update the corresponding sign-in and sign-out links.
-Its contract is a stable `userId`, display name, and email. The existing hosted
+Its contract is a stable `userId`, display name, and email. The legacy
 adapter reads trusted gateway headers; never trust user-supplied identity headers
 on an unprotected self-hosted server. The current gateway adapter is intended for
 Sites hosting. A standalone authentication provider is not included yet.
@@ -109,10 +113,11 @@ content is not edited by these tests.
 ## Deploy
 
 The included build emits a Cloudflare Worker under `dist/server/` and browser
-assets under `dist/client/`. Configure `DATABASE_URL` as a runtime secret and apply
-migrations before publishing. `.openai/hosting.json` identifies this Sites instance;
-remove its `project_id` when registering a separate deployment. It declares no D1
-or R2 binding. Keep `.env`, `.wrangler`, `.sites-runtime`, and `node_modules` out
+assets under `dist/client/`. Future deployment must use an independent provider
+and a standalone authentication adapter. Configure `DATABASE_URL` as a runtime
+secret and apply migrations before publishing. The former `.openai/hosting.json`
+registration has been removed. Local builds declare no D1 or R2 binding.
+Keep `.env`, `.wrangler`, `.sites-runtime`, and `node_modules` out
 of source archives. Source code is free; hosting and database costs depend on
 where you run it.
 

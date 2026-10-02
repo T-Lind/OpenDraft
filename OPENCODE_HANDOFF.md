@@ -11,6 +11,12 @@ The user explicitly requires **PostgreSQL**, prefers **Neon**, and explicitly
 wants **no AI-centric or AI features**. Keep critique, feedback, recommendations,
 and moderation human. No model API keys or AI calls exist in this app.
 
+**Hosting constraint:** the owner permanently deleted the ChatGPT-hosted Site on
+2026-10-02. The Sites connector subsequently confirmed "Sites project not found".
+The local hosting registration is removed. Do not recreate or publish a ChatGPT
+Site. This is a local source handoff; use an independent provider for any future
+deployment. Read AGENTS.md for the persistent project constraints.
+
 Project checkout:
 `C:\Users\tenant\source\repos\OpenDraft\opendraft`
 
@@ -21,7 +27,8 @@ app/api/workshop/route.ts, db/storage.ts, and db/schema.ts.
 
 - React/Vinext on Vite, TypeScript, accessible Radix UI primitives.
 - Neon PostgreSQL connected using its HTTP serverless driver. Credentials are
-  already in the ignored .env file and configured as a secret in Sites.
+  already in the ignored .env file. The former remote Site secret was removed
+  before the owner deleted the Site. Preserve the local connection and database.
 - Initial PostgreSQL migration applied successfully. No D1/SQLite database.
 - Spotlight/queue: four active pieces, FIFO admission, rotation at three critiques.
 - Credits: five starting, two per spotlight review, one outside, five to publish.
@@ -47,8 +54,8 @@ critique length, reward amounts, duplicate critiques, concurrent publishing,
 concurrent reviews, queue rotation, bookmarks, circles, profiles, reports, and
 withdrawal. These tests do not change live workshop content.
 
-TypeScript checks passed. A final production build is part of the publication
-workflow. Browser checks covered genre filtering, sign-in, and the signed-in draft
+TypeScript checks and production build passed. Browser checks covered genre
+filtering, sign-in, and the signed-in draft
 editor. The real preview API returns six works and three circles from Neon.
 
 ## Start / test / build
@@ -102,8 +109,9 @@ at /signin-with-chatgpt?return_to=/; it is excluded from production.
    work and preserves the previous text and feedback; no version diff UI exists.
 7. Session storage recovers unsaved editor/critique text only. It is not the
    authoritative database. Do not replace Neon state with localStorage.
-8. Authentication currently uses Sites gateway identity through app/chatgpt-auth.ts.
-   ChatGPT is only the sign-in provider; there are no AI product features.
+8. The legacy authentication adapter in app/chatgpt-auth.ts remains for local
+   preview compatibility. There is no active ChatGPT-hosted deployment. The
+   preview uses a development-only mock; there are no AI product features.
 9. For independent deployment, replace the auth adapter and sign-in/out links with
    a standalone provider. Do not accept arbitrary identity headers from clients.
 10. Cloudflare Worker code cannot use normal raw PostgreSQL TCP connections. Neon
@@ -122,17 +130,17 @@ feature on Scribophile. Prioritize these before an independent public launch:
 - Per-paragraph multiple annotations, revision history/diffs, critique replies.
 - More extensive mobile accessibility and contrast audits.
 
-The platform deployment starts owner-private. Do not make it public or change
-sharing without the user's direction. Use the existing Site identity in
-.openai/hosting.json for further publication. A new host can be used if the user
-chooses one; preserve Neon and the PostgreSQL schema.
+There is no active platform deployment. The owner explicitly rejected ChatGPT
+hosting and deleted the old Site. Do not restore its identity or register a new
+one. Preserve Neon and the PostgreSQL schema when configuring independent hosting.
 
 ## Source / deployment notes
 
 The repository includes the bundled build and runtime helpers and vendored UI
-components. Preserve licenses and package-lock.json. Runtime secret values do not
-belong in .openai/hosting.json. The hosting manifest contains the Site project id
-and null D1/R2 bindings only. Source archives omit .env, .git, node_modules, build
+components. Preserve licenses and package-lock.json. The hosting manifest was
+removed; Vite no longer imports it, and the build helper tolerates its absence.
+Bundled local preview helpers remain; they do not automatically deploy anything.
+Source archives omit .env, .git, node_modules, build
 output, .wrangler and .sites-runtime. README.md explains independent setup and
 limitations. OpenDraft-source.zip is the portable source delivery beside the
 checkout once packaged.
