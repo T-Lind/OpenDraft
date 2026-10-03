@@ -107,7 +107,7 @@ test('a line comment appears as an inline chip and the manuscript continues afte
   await registerWriter(page, `ci-commenter-${Date.now()}-${testInfo.retry}@example.test`, 'CI Commenter');
 
   await page.getByRole('button', { name: 'Critique now' }).first().click();
-  await page.getByRole('button', { name: /The last light in the house/ }).click();
+  await page.locator('.work-title').filter({ hasText: 'The last light in the house' }).click();
   await page.getByRole('button', { name: 'Write a critique' }).click();
   await expect(page.getByRole('heading', { name: 'Write a critique' })).toBeVisible();
 
