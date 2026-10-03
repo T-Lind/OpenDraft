@@ -11,7 +11,7 @@ export default defineConfig({
     ? [['github'], ['html', { open: 'never' }]]
     : [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://localhost:5173',
     browserName: 'chromium',
     viewport: { width: 1440, height: 1000 },
     trace: 'retain-on-failure',
@@ -20,7 +20,7 @@ export default defineConfig({
   },
   webServer: {
     command: 'npx next dev --hostname 127.0.0.1 --port 5173',
-    url: 'http://127.0.0.1:5173/api/workshop',
+    url: 'http://localhost:5173/api/workshop',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
