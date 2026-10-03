@@ -306,16 +306,16 @@ function InlineInsert({ onCommit, onCancel }: { onCommit: (text: string) => void
 }
 
 type InlineDraft = { para: number; offset: number; start: number; end: number; quote: string };
-function renderParagraph(plain: string, runs: InlineRun[], para: number, annos: WorkAnnotation[], selectedId:string,canRemove: boolean, onRemove: (id: string) => void, onSelect: (a: WorkAnnotation, element: HTMLElement) => void, draft: InlineDraft | null, onCommitInline: (text: string) => void, onCancelInline: () => void): ReactNode[] {
+function renderParagraph(plain: string, runs: InlineRun[], para: number, annos: WorkAnnotation[], selectedId:string,canRemove: boolean, onRemove: (id: string) => void, onSelect: (a: WorkAnnotation) => void, draft: InlineDraft | null, onCommitInline: (text: string) => void, onCancelInline: () => void): ReactNode[] {
   const relevant = annos.filter(a => a.para === para && a.start >= 0 && a.start <= plain.length && a.end >= a.start && a.end <= plain.length);
   const boundaries = [...new Set([0, plain.length, ...relevant.flatMap(a => [a.start, a.end]), ...(draft?.para === para ? [draft.offset] : [])])].sort((a, b) => a - b);
   const out: ReactNode[] = [];
   const props = (a: WorkAnnotation) => a.id === '__pending__' ? {} : {
     'data-annotation-id': a.id, role: 'button' as const, tabIndex: 0, 'aria-label': `${a.kind} by ${a.author}`,'aria-current':selectedId===a.id?true:undefined,
-    onClick: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); onSelect(a, event.currentTarget); },
+    onClick: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); onSelect(a); },
     onDoubleClick: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); if (canRemove && a.id.startsWith('local-')) onRemove(a.id); },
     onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
-      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(a, event.currentTarget); }
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(a); }
       if ((event.key === 'Delete' || event.key === 'Backspace') && canRemove && a.id.startsWith('local-')) { event.preventDefault(); onRemove(a.id); }
     },
   };
@@ -335,6 +335,23 @@ function renderParagraph(plain: string, runs: InlineRun[], para: number, annos: 
       text = kind === 'delete' ? <del key={`${a.id}-${start}`} className={className} {...props(a)}>{text}</del> : <mark key={`${a.id}-${start}`} className={className} {...props(a)}>{text}</mark>;
     }
     out.push(<span key={`text-${start}`}>{text}</span>);
+    for (const a of relevant.filter(a => a.kind === 'comment' && a.end === end && a.id !== '__pending__' && a.body.trim())) {
+      out.push(
+        <button
+          type="button"
+          key={`chip-${a.id}`}
+          data-anno-ui
+          data-note-id={a.id}
+          className={`annotation-chip${selectedId===a.id?' selected':''}`}
+          {...props(a)}
+          aria-label={`Comment by ${a.author}: ${a.body}`}
+        >
+          <MessageSquare size={11} aria-hidden="true" />
+          <span className="annotation-chip-author">{a.author}:</span>
+          <span className="annotation-chip-body">{formatInline(a.body)}</span>
+        </button>,
+      );
+    }
   }
   return out;
 }
@@ -408,7 +425,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
   useEffect(() => {
     const outside = (event: PointerEvent) => {
       const target = event.target as Element | null;
-      if (!target?.closest('.annotation-margin-card, [data-annotation-id]')) setSelectedId('');
+      if (!target?.closest('[data-annotation-id]')) setSelectedId('');
       if (!rootRef.current?.contains(target) && !target?.closest('.annotate-pop, .annotate-rail')) { setPending(null); setMode('menu'); setDraft(''); }
     };
     const keyboard = (event: KeyboardEvent) => {
@@ -439,12 +456,10 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
   }, [pending, mode, clear, commitComment, applyKind]);
 
   const visibleAnnotations = pending && mode === 'comment' ? [...annotations, { ...pending, id: '__pending__', workId: '', userId: '', author: 'You', kind: 'comment' as const, body: '', createdAt: 0 }] : annotations;
-  const selectNote = (annotation: WorkAnnotation, element: HTMLElement) => {
+  const selectNote = (annotation: WorkAnnotation) => {
     setPending(null); setMode('menu'); setDraft('');
     setSelectedId(annotation.id);
-    element.closest('.annotated-paragraph-row')?.querySelector<HTMLElement>(`.annotation-margin-card[data-note-id="${CSS.escape(annotation.id)}"]`)?.focus({preventScroll:true});
   };
-  const kindLabel:Record<AnnotationKind,string>={comment:'Comment',highlight:'Highlight',delete:'Suggested cut',insert:'Suggested addition'};
 
   return (
     <div className="manuscript-wrap">
@@ -457,7 +472,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
         </div>
       )}
       <div ref={rootRef} className={'reader-text ' + (isPoem ? 'poetry' : '')} onMouseUp={evaluate} onKeyUp={event => { if (event.shiftKey && event.key.startsWith('Arrow')) evaluate(event); }}>
-        {plains.map((p, i) => {const notes=annotations.filter(annotation=>annotation.para===i);const activate=(note:WorkAnnotation)=>{setSelectedId(note.id);rootRef.current?.querySelector<HTMLElement>(`[data-annotation-id="${CSS.escape(note.id)}"]`)?.focus({preventScroll:true});};return <div className="annotated-paragraph-row" key={i}><p data-para={i}>{renderParagraph(p.plain, p.runs, i, visibleAnnotations,selectedId, canAnnotate, (id) => { onRemove(id); clear(); }, selectNote, inlineInsert, commitInline, clear)}</p><aside className="annotation-margin" aria-label={`Line notes for paragraph ${i+1}`}>{notes.map(note=><article role="button" tabIndex={0} key={note.id} data-anno-ui data-note-id={note.id} aria-current={selectedId===note.id?true:undefined} className={`annotation-margin-card kind-${note.kind}${selectedId===note.id?' selected':''}`} onClick={()=>activate(note)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();activate(note);}}}><span className="annotation-margin-meta"><b>{kindLabel[note.kind]}</b><span>{note.author}</span></span>{note.quote&&note.kind!=='insert'&&<q>{note.quote.length>110?note.quote.slice(0,110)+'…':note.quote}</q>}{note.body&&<span className="annotation-margin-body">{formatInline(note.body)}</span>}{canAnnotate&&note.id.startsWith('local-')&&<button type="button" className="annotation-remove" onClick={event=>{event.stopPropagation();onRemove(note.id);clear();}}>Remove</button>}</article>)}</aside></div>;})}
+        {plains.map((p, i) => <p data-para={i} key={i}>{renderParagraph(p.plain, p.runs, i, visibleAnnotations,selectedId, canAnnotate, (id) => { onRemove(id); clear(); }, selectNote, inlineInsert, commitInline, clear)}</p>)}
       </div>
 
       {pending && mode === 'menu' && (

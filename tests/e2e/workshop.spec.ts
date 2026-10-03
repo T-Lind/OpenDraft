@@ -9,6 +9,23 @@ function captureBrowserFailures(page: Page) {
   return failures;
 }
 
+async function registerWriter(page: Page, email: string, penName: string) {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Join OpenDraft' }).click();
+  await page.getByRole('button', { name: 'Create an email account' }).click();
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel(/^Password/).fill('CI browser password 2026!');
+  await page.getByLabel('Confirm password').fill('CI browser password 2026!');
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await page.getByRole('link', { name: 'Open the development-only email link' }).click();
+  await page.getByLabel('Pen name').fill(penName);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel(/I am at least 13/).check();
+  await page.getByRole('button', { name: /Go to my dashboard/ }).click();
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+}
+
 test('landing, policies, and mobile layout render without browser failures', async ({ page }) => {
   const failures = captureBrowserFailures(page);
   await page.goto('/');
@@ -82,5 +99,63 @@ test('a new writer can onboard and persist a private draft', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'The CI Lantern' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'The CI Lantern' })).toBeVisible();
+  expect(failures).toEqual([]);
+});
+
+test('a line comment appears as an inline chip and the manuscript continues after it', async ({ page }, testInfo) => {
+  const failures = captureBrowserFailures(page);
+  await registerWriter(page, `ci-commenter-${Date.now()}-${testInfo.retry}@example.test`, 'CI Commenter');
+
+  await page.getByRole('button', { name: 'Critique now' }).first().click();
+  await page.getByRole('button', { name: /The last light in the house/ }).click();
+  await page.getByRole('button', { name: 'Write a critique' }).click();
+  await expect(page.getByRole('heading', { name: 'Write a critique' })).toBeVisible();
+
+  const firstParagraph = page.locator('.reader-manuscript .reader-text p').first();
+  await firstParagraph.evaluate(element => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const node = walker.nextNode();
+    if (!node?.textContent) throw new Error('Expected manuscript text');
+    const phrase = 'The light';
+    const start = node.textContent.indexOf(phrase);
+    if (start < 0) throw new Error(`Expected phrase: ${phrase}`);
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + phrase.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+
+  await page.locator('.annotate-rail-btn.cm').click();
+  await page.getByLabel('Comment text').fill('This opening image lands.');
+  await page.getByRole('button', { name: 'Add comment' }).click();
+
+  const chip = firstParagraph.locator('.annotation-chip');
+  await expect(chip).toBeVisible();
+  await expect(chip).toContainText('CI Commenter:');
+  await expect(chip).toContainText('This opening image lands.');
+  expect(await page.locator('.annotation-margin, .annotation-margin-card').count()).toBe(0);
+  expect(await chip.evaluate(element => ({
+    livesInsideParagraph: element.parentElement?.matches('p[data-para="0"]') ?? false,
+    followsCommentHighlight: !!element.previousElementSibling?.querySelector('.anno-comment'),
+    manuscriptContinues: element.nextElementSibling !== null,
+  }))).toEqual({ livesInsideParagraph: true, followsCommentHighlight: true, manuscriptContinues: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileWidths = await page.evaluate(() => {
+    const navigation = document.querySelector<HTMLElement>('.sidebar');
+    return {
+      viewport: document.documentElement.clientWidth,
+      document: document.documentElement.scrollWidth,
+      body: document.body.scrollWidth,
+      navigation: navigation?.scrollWidth ?? 0,
+      navigationViewport: navigation?.clientWidth ?? 0,
+    };
+  });
+  expect(mobileWidths.document).toBeLessThanOrEqual(mobileWidths.viewport);
+  expect(mobileWidths.body).toBeLessThanOrEqual(mobileWidths.viewport);
+  expect(mobileWidths.navigation).toBeLessThanOrEqual(mobileWidths.navigationViewport);
   expect(failures).toEqual([]);
 });
