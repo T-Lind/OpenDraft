@@ -108,7 +108,7 @@ test('a line comment appears as an inline chip and the manuscript continues afte
 
   await page.getByRole('button', { name: 'Critique now' }).first().click();
   await page.locator('.work-title').filter({ hasText: 'The last light in the house' }).click();
-  await page.getByRole('button', { name: 'Write a critique' }).click();
+  await page.locator('.story-cta .primary-button').click();
   await expect(page.getByRole('heading', { name: 'Write a critique' })).toBeVisible();
 
   const firstParagraph = page.locator('.reader-manuscript .reader-text p').first();
