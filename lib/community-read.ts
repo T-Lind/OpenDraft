@@ -62,4 +62,3 @@ export async function communityRead(db:Database,uid:string,admin:boolean,params:
 export async function accessibleWork(db:Database,uid:string,id:string){
  const w=await db.prepare("SELECT id,title,author_id,revision_of,version,content,status,created_at FROM works WHERE id=? AND (author_id=? OR status NOT IN ('draft','withdrawn'))").bind(id,uid).first();if(!w)fail('This writing is unavailable.',404);return w;
 }
-

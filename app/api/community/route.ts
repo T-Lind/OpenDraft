@@ -124,4 +124,3 @@ export async function POST(request:Request){
   fail('Unknown community action.');
  }catch(e){return error(e);}
 }
-

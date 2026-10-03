@@ -16,4 +16,3 @@ export function useJson<T>(url:string,enabled=true){
  },[url,enabled,revision]);
  return {...(state.key===url?state:{data:null,error:'',loading:enabled}),refresh};
 }
-

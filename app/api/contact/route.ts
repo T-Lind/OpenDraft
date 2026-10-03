@@ -14,4 +14,3 @@ export async function POST(request:Request){
   return Response.json({ok:true,reference:id},{headers:{'Cache-Control':'no-store'}});
  }catch(e){const err=e as Error&{status?:number;retryAfter?:number};return Response.json({error:e instanceof z.ZodError?e.issues[0]?.message:e instanceof SyntaxError?'Invalid request.':err.status?err.message:'Your request could not be saved. Please retry.'},{status:e instanceof z.ZodError||e instanceof SyntaxError?400:err.status||503,headers:{'Cache-Control':'no-store',...(err.retryAfter?{'Retry-After':String(err.retryAfter)}:{})}});}
 }
-

@@ -108,4 +108,3 @@ export function AvatarUpload({ user, act, busy, onError, portrait = false }: { u
     </Dialog>
   </div>;
 }
-
