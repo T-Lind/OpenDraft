@@ -39,7 +39,14 @@ test('landing, policies, and mobile layout render without browser failures', asy
 
 test('a new writer can onboard and persist a private draft', async ({ page }) => {
   const failures = captureBrowserFailures(page);
-  await page.goto('/signin-with-chatgpt?return_to=%2F%23Dashboard');
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Join OpenDraft' }).click();
+  await page.getByRole('button', { name: 'Create an email account' }).click();
+  await page.getByLabel('Email').fill('ci-writer@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('CI browser password 2026!');
+  await page.getByLabel('Confirm password').fill('CI browser password 2026!');
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await page.getByRole('link', { name: 'Open the development-only email link' }).click();
 
   await expect(page.getByRole('heading', { name: 'What should we call you?' })).toBeVisible();
   await page.getByLabel('Pen name').fill('CI Writer');
