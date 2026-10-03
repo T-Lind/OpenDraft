@@ -3,11 +3,27 @@ export const wordCount = (text: string) => text.trim() ? text.trim().split(/\s+/
 export const workKinds = ['Short story', 'Novel excerpt', 'Chapter', 'Poem', 'Flash fiction', 'Vignette', 'Personal essay', 'Creative nonfiction', 'Screenplay', 'Stage play', 'Fanfiction'];
 export const workStages = ['First draft', 'Second draft', 'Revision', 'Ready for a final look'];
 export const matureThemes = ['Violence', 'Sexual content', 'Strong language', 'Substance use', 'Mental health', 'Death or grief', 'Trauma', 'Discrimination'];
+export const writingProcessValues = ['human-only', 'ai-edited', 'ai-collaborative', 'mostly-ai', 'ai-written', 'not-declared'] as const;
+export const acceptedWritingProcessValues = [...writingProcessValues, 'ai-assisted'] as const;
+export const writingProcessOptions = [
+  { value: 'human-only', label: '1 · Human-written', description: 'No generative AI was used to write or rewrite the manuscript.' },
+  { value: 'ai-edited', label: '2 · Human-written, AI-edited', description: 'The manuscript is human-written; generative AI helped polish, rephrase, or copyedit it.' },
+  { value: 'ai-collaborative', label: '3 · Human-led, AI-assisted', description: 'The writer led the work, with generative AI contributing ideas, passages, or structural help.' },
+  { value: 'mostly-ai', label: '4 · Mostly AI-written, human-edited', description: 'Generative AI produced most of the draft, and a person substantially selected, revised, or shaped it.' },
+  { value: 'ai-written', label: '5 · AI-written', description: 'Generative AI produced essentially all of the manuscript.' },
+  { value: 'not-declared', label: 'Not declared', description: 'The writer has chosen not to describe the manuscript’s writing process.' },
+] as const satisfies ReadonlyArray<{ value: typeof writingProcessValues[number]; label: string; description: string }>;
+export type WritingProcess = typeof acceptedWritingProcessValues[number];
+export const writingProcessDescription = (value?: WritingProcess) => {
+  if (value === 'ai-assisted') return 'Writer disclosed generative-AI assistance in this manuscript.';
+  const option = writingProcessOptions.find(item => item.value === (value || 'not-declared')) || writingProcessOptions.at(-1)!;
+  return value === 'human-only' ? 'Writer says this manuscript was written without generative AI.' : option.description;
+};
 export const formatCredits = (n: number) => { const v = Math.round(n * 1000) / 1000; return Number.isInteger(v) ? String(v) : String(Number(v.toFixed(3))); };
 export const readingTime = (words: number) => Math.max(1, Math.ceil((words || 0) / 225));
 export const readingTimeLabel = (words: number) => `${readingTime(words)} min read`;
 export const streakLabel = (current: number, longest: number) => current > 0 ? `${current}-day streak` : longest > 0 ? `Best: ${longest} days` : 'No streak yet';
-export type Work = {revisionOf?:string|null;showcaseOptIn?:boolean;aiShowcaseConsent?:boolean;aiProcess?:'human-only'|'ai-assisted'|'not-declared';id:string; authorId:string; author:string; title:string; genre:string; kind:string; stage:string; content:string; request:string; status:string; reviews:number; version:number; createdAt:number; words:number; warning:string; mature?:boolean; themes?:string; targetReviews?:number; critiqueVisibility?:string;bookmarked?:boolean;hasReviewed?:boolean;queuePosition?:number};
+export type Work = {revisionOf?:string|null;showcaseOptIn?:boolean;aiShowcaseConsent?:boolean;aiProcess?:WritingProcess;id:string; authorId:string; author:string; title:string; genre:string; kind:string; stage:string; content:string; request:string; status:string; reviews:number; version:number; createdAt:number; words:number; warning:string; mature?:boolean; themes?:string; targetReviews?:number; critiqueVisibility?:string;bookmarked?:boolean;hasReviewed?:boolean;queuePosition?:number};
 export type Review = {id:string;workId:string;userId:string;author:string;strengths:string;suggestions:string;overall:string;annotation:string;quote:string;processDisclosure?:'human-only'|'assistive-tools'|'not-declared';attested?:boolean;createdAt:number;version:number};
 export type Circle = {id:string;name:string;description:string;genre:string;members:number;joined?:boolean;ownerId?:string};
 export type AnnotationKind = 'delete' | 'insert' | 'highlight' | 'comment';

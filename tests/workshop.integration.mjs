@@ -66,7 +66,7 @@ try{
  let r=await read('alice');
  await query("UPDATE works SET genre='Literary fiction'");ok(r.status===200,'snapshot loads');ok(r.data.user.credits===5,'five starting credits');ok(r.data.works.length===6,'six seeded examples');ok(r.data.works.filter(w=>w.status==='spotlight').length===4,'four spotlight slots');
  r=await action(null,{action:'bookmark',workId:'the-last-light',saved:true});ok(r.status===401,'anonymous write denied');r=await action('alice',{action:'bookmark',workId:'the-last-light',saved:true},'https://attacker.test');ok(r.status===403,'cross-origin write denied');
- r=await action('alice',{action:'saveDraft',work:work('alice-private')});ok(r.status===200,'private draft saved');ok(r.data.user.credits===5,'draft costs no credits');ok(!(await read('bob')).data.works.some(w=>w.id==='alice-private'),'private draft hidden from other users');
+ r=await action('alice',{action:'saveDraft',work:{...work('alice-private'),aiProcess:'ai-edited'}});ok(r.status===200,'private draft saved');ok(r.data.works.find(w=>w.id==='alice-private').aiProcess==='ai-edited','writing-process scale persists');ok(r.data.user.credits===5,'draft costs no credits');ok(!(await read('bob')).data.works.some(w=>w.id==='alice-private'),'private draft hidden from other users');
  r=await action('bob',{action:'saveDraft',work:work('alice-private','Hijacked')});ok(r.status===403,'editing another writer’s work denied');
  // Autosave accepts incomplete work, stays lightweight, and rejects stale writers.
  await read('autosaver');

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { genres, workKinds, workStages, wordCount } from '@/app/data';
+import { genres, workKinds, workStages, wordCount, acceptedWritingProcessValues } from '@/app/data';
 import type { Database } from '@/db/storage';
 import {fail} from './member';
 export const draftInput = z.object({
@@ -7,7 +7,7 @@ export const draftInput = z.object({
  genre:z.enum(genres.slice(1) as [string,...string[]]),kind:z.enum(workKinds as [string,...string[]]),stage:z.enum(workStages as [string,...string[]]),
  content:z.string().max(50000),request:z.string().max(800),warning:z.string().max(300).default(''),mature:z.boolean().default(false),
  themes:z.string().max(400).default(''),targetReviews:z.number().int().min(2).max(5).default(2),critiqueVisibility:z.enum(['public','private']).default('public'),
- aiProcess:z.enum(['human-only','ai-assisted','not-declared']).default('not-declared'),
+ aiProcess:z.enum(acceptedWritingProcessValues).default('not-declared'),
  revisionOf:z.string().min(1).max(100).nullable().default(null)
 });
 export async function revisionVersion(db:Database,uid:string,revisionOf:string|null){

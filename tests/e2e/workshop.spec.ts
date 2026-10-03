@@ -59,11 +59,22 @@ test('a new writer can onboard and persist a private draft', async ({ page }) =>
   await page.getByRole('button', { name: /Go to my dashboard/ }).click();
 
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  expect(await page.evaluate(() => localStorage.getItem('theme'))).toBe('dark');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  await expect(page.getByRole('button', { name: 'Switch to light mode' })).toBeVisible();
+
   await page.getByRole('button', { name: 'Share your writing' }).click();
   await expect(page.getByRole('heading', { name: 'A new draft' })).toBeVisible();
   await page.getByLabel('A title for your work').fill('The CI Lantern');
   await page.getByRole('textbox', { name: 'Your writing' }).fill('The lantern stayed lit through the rain, waiting for a traveler who knew its name.');
   await page.getByLabel('What would you like feedback on?').fill('Does the opening create a clear mood?');
+  await page.getByText('Submission settings', { exact: false }).click();
+  await page.getByLabel(/^Writing process/).selectOption('mostly-ai');
+  await expect(page.getByText('Generative AI produced most of the draft', { exact: false })).toBeVisible();
   await expect(page.getByText('Saved privately', { exact: true })).toBeVisible({ timeout: 20_000 });
 
   await page.getByRole('button', { name: 'Close editor' }).click();

@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Kbd } from '@/components/ui/kbd';
-import { Work, Review, Circle, genres, wordCount, workKinds, workStages, matureThemes, formatCredits, readingTimeLabel, WorkAnnotation, AnnotationKind, AuthorProfileData, WorkMessage, Analytics } from './data';
+import { Work, Review, Circle, genres, wordCount, workKinds, workStages, matureThemes, writingProcessOptions, writingProcessDescription, type WritingProcess, formatCredits, readingTimeLabel, WorkAnnotation, AnnotationKind, AuthorProfileData, WorkMessage, Analytics } from './data';
 import type { Snapshot, Act } from './workshop';
 import { Empty } from './workshop';
 import { WriterAvatar } from '@/components/writer-avatar';
@@ -24,6 +24,22 @@ import { useDraftAutosave } from '@/hooks/use-draft-autosave';
 
 function FieldSelect({ label, value, options, change }: { label: string; value: string; options: string[]; change: (v: string) => void }) {
   return <label className="field-label">{label}<select className="form-select" value={value} onChange={e => change(e.target.value)}>{options.map(o => <option key={o}>{o}</option>)}</select></label>;
+}
+
+function WritingProcessField({ value, change }: { value?: WritingProcess; change: (value: WritingProcess) => void }) {
+  const selected = value === 'ai-assisted' ? 'ai-collaborative' : value || 'not-declared';
+  const option = writingProcessOptions.find(item => item.value === selected) || writingProcessOptions.at(-1)!;
+  const level = selected === 'not-declared' ? 0 : Math.max(0, writingProcessOptions.findIndex(item => item.value === selected) + 1);
+  return <label className="field-label writing-process-field">Writing process
+    <select className="form-select" value={selected} onChange={event => change(event.target.value as WritingProcess)}>
+      {writingProcessOptions.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+    </select>
+    <span className="process-scale-preview">
+      <span className="process-scale-dots" aria-hidden="true">{[1, 2, 3, 4, 5].map(step => <i key={step} className={level > 0 && step <= level ? 'filled' : ''} />)}</span>
+      <span>{option.description}</span>
+    </span>
+    <span className="field-hint">This is a process disclosure, not a quality score. Human writing is the workshop norm; AI-written work is discouraged, but honest disclosure is more useful than unreliable detection.</span>
+  </label>;
 }
 
 /* ---------------------------------------------------------- Inline formatting */
@@ -158,7 +174,7 @@ export function Editor({ initial, credits, act, busy, onDone, close, onSaved,rev
         <FieldSelect label="Type of work" value={work.kind} options={workKinds} change={v => update('kind', v)} />
         <FieldSelect label="Draft stage" value={work.stage} options={workStages} change={v => update('stage', v)} />
       </div><label className="field-label">Notes for readers <span className="optional">(optional)</span><Input maxLength={300} placeholder="Other context about this work…" value={work.warning} onChange={e => update('warning', e.target.value)} /></label>
-      <label className="field-label">Writing process<select className="form-select" value={work.aiProcess||'not-declared'} onChange={event=>update('aiProcess',event.target.value)}><option value="human-only">Human-written manuscript</option><option value="ai-assisted">Generative-AI assistance used (disclosed)</option><option value="not-declared">Prefer not to declare</option></select><span className="field-hint">Human writing is the workshop norm. AI-assisted writing is discouraged, but transparent disclosure is better than unreliable detection or secret enforcement.</span></label>
+      <WritingProcessField value={work.aiProcess} change={value => update('aiProcess', value)} />
       <div className="mature-box">
         <label className="check-row"><input type="checkbox" checked={!!work.mature} onChange={e => update('mature', e.target.checked)} /><span><AlertTriangle size={13} /> Contains mature themes</span></label>
         {work.mature && (
@@ -545,7 +561,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
               <strong>Critique guidance from {w.author}</strong>
               <p>{w.request}</p>
             </div>
-            <div className="ai-process-note"><strong>Writing process</strong><span>{w.aiProcess==='human-only'?'Writer says this manuscript is human-written.':w.aiProcess==='ai-assisted'?'Writer disclosed generative-AI assistance in this manuscript.':'Writer has not declared an AI process.'}</span></div>
+            <div className="ai-process-note"><strong>Writing process</strong><span>{writingProcessDescription(w.aiProcess)}</span></div>
             {w.warning && <div className="content-warning"><Flag size={14} style={{ marginRight: 6, verticalAlign: '-2px' }} /><strong>Content note:</strong> {w.warning}</div>}
             {(w.mature || w.themes) && <div className="mature-note"><AlertTriangle size={13} /><strong>Mature themes:</strong> {w.themes || 'Mature content'}</div>}
             <AnnotatedManuscript content={w.content} isPoem={w.kind === 'Poem'} annotations={annotations} canAnnotate={canAnnotate} onAdd={addAnnotation} onRemove={removeAnnotation} canUndo={!!history.past.length} canRedo={!!history.future.length} onUndo={() => changeHistory(undoAnnotations)} onRedo={() => changeHistory(redoAnnotations)} />
@@ -694,7 +710,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
 
             <h2 className="section-title">About this work</h2>
             <p className="story-request"><strong>The writer asks:</strong> {formatInline(w.request)}</p>
-            <div className="ai-process-note"><strong>Writing process</strong><span>{w.aiProcess==='human-only'?'Writer says this manuscript is human-written.':w.aiProcess==='ai-assisted'?'Writer disclosed generative-AI assistance in this manuscript.':'Writer has not declared an AI process.'}</span></div>
+            <div className="ai-process-note"><strong>Writing process</strong><span>{writingProcessDescription(w.aiProcess)}</span></div>
             {(w.warning || w.mature || w.themes) && <div className="mature-note"><AlertTriangle size={13} /><strong>Content note:</strong> {[w.warning, w.themes].filter(Boolean).join(' · ')}</div>}
 
             <h2 className="section-title" style={{ marginTop: 20 }}>Read</h2>

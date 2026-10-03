@@ -1,6 +1,6 @@
 import { database, type Database } from '@/db/storage';
 import { readEnv, googleConfigured } from '@/lib/auth';
-import { sampleWorks, sampleCircles, genres, wordCount, workKinds } from '@/app/data';
+import { sampleWorks, sampleCircles, genres, wordCount, workKinds, acceptedWritingProcessValues } from '@/app/data';
 import { z } from 'zod';
 import { avatarPng, screenAvatar } from '@/lib/avatar';
 import { rateLimit, writeLimits } from '@/lib/rate-limit';
@@ -151,7 +151,7 @@ export async function GET(request?: Request) {
   }
 }
 
-const workInput = z.object({ id: z.string().min(1).max(100), title: z.string().trim().min(1).max(120), genre: z.enum(genres.slice(1) as [string, ...string[]]), kind: z.enum(workKinds as [string, ...string[]]), stage: z.enum(['First draft', 'Second draft', 'Revision', 'Ready for a final look']), content: z.string().trim().min(1).max(50000), request: z.string().trim().min(5).max(800), warning: z.string().trim().max(300).default(''), mature: z.boolean().default(false), themes: z.string().trim().max(400).default(''), targetReviews: z.number().int().min(2).max(5).default(2), critiqueVisibility: z.enum(['public', 'private']).default('public'), aiProcess:z.enum(['human-only','ai-assisted','not-declared']).default('not-declared'),revisionOf:z.string().min(1).max(100).nullable().default(null) });
+const workInput = z.object({ id: z.string().min(1).max(100), title: z.string().trim().min(1).max(120), genre: z.enum(genres.slice(1) as [string, ...string[]]), kind: z.enum(workKinds as [string, ...string[]]), stage: z.enum(['First draft', 'Second draft', 'Revision', 'Ready for a final look']), content: z.string().trim().min(1).max(50000), request: z.string().trim().min(5).max(800), warning: z.string().trim().max(300).default(''), mature: z.boolean().default(false), themes: z.string().trim().max(400).default(''), targetReviews: z.number().int().min(2).max(5).default(2), critiqueVisibility: z.enum(['public', 'private']).default('public'), aiProcess:z.enum(acceptedWritingProcessValues).default('not-declared'),revisionOf:z.string().min(1).max(100).nullable().default(null) });
 
 const annotationInput = z.object({
   kind: z.enum(['delete', 'insert', 'highlight', 'comment']),
