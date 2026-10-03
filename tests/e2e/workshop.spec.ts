@@ -17,7 +17,7 @@ test('landing, policies, and mobile layout render without browser failures', asy
 
   await page.getByRole('button', { name: 'Join OpenDraft' }).click();
   await expect(page.getByLabel('Email')).toBeVisible();
-  await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
+  await expect(page.getByLabel(/^Password/)).toBeVisible();
   await page.keyboard.press('Escape');
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -42,8 +42,9 @@ test('a new writer can onboard and persist a private draft', async ({ page }) =>
   await page.goto('/');
   await page.getByRole('button', { name: 'Join OpenDraft' }).click();
   await page.getByRole('button', { name: 'Create an email account' }).click();
+  await expect(page.getByRole('heading', { name: 'Join the workshop.' })).toBeVisible();
   await page.getByLabel('Email').fill('ci-writer@example.test');
-  await page.getByLabel('Password', { exact: true }).fill('CI browser password 2026!');
+  await page.getByLabel(/^Password/).fill('CI browser password 2026!');
   await page.getByLabel('Confirm password').fill('CI browser password 2026!');
   await page.getByRole('button', { name: 'Create account' }).click();
   await page.getByRole('link', { name: 'Open the development-only email link' }).click();
