@@ -1,0 +1,1 @@
+ALTER TABLE "works" ADD COLUMN "critique_visibility" text DEFAULT 'public' NOT NULL;

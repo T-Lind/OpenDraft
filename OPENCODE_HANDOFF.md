@@ -1,6 +1,285 @@
 # OpenCode handoff — OpenDraft
 
-Date: 2026-10-02
+Date: 2026-10-03
+
+## Current pass: mobile critique, revision loop, auth, and AI policy
+
+Migration `0014_faulty_living_mummy` is applied to the production Neon database.
+It adds verified email/password account
+credentials, provider identities, one-time auth tokens, writing/review process
+disclosures, reviewer attestation, and writer-private line-note status/response.
+Passwords use unique-salt PBKDF2-SHA-256 at 600,000 iterations. Verification
+links expire after 24 hours and reset links after 30 minutes; reset and the new
+“sign out on every device” control revoke older sessions. Google identities link
+to an existing verified-password profile by normalized verified email. Resend is
+the production transactional-email provider; local development exposes the
+one-time link without making an external email request.
+
+Saved and temporary line annotations render as always-visible cards aligned to
+their paragraph in a right margin. On narrow screens the card flows immediately
+below the passage, while the selection tool becomes a bottom toolbar and the
+comment composer becomes a bottom sheet. The phone layout uses a horizontally
+scrollable bottom navigation. The editor now has focus mode, `.txt`/Markdown
+import, export, collapsed submission settings, simpler publish copy, and a
+revision workspace where the writer can resolve, keep, reopen, or defer prior
+line notes with a private response.
+
+The policy deliberately does not use automated AI-authorship detection. Human
+writing and critique remain the norm; AI-assisted manuscripts are discouraged
+but transparently disclosed, and reviewers must attest that they read the work
+and personally stand behind every point. Public policy pages and the in-product
+guide explain disclosure, reports, and human moderation. Jev remains a separate,
+explicit per-work showcase evaluation and is not an authorship detector.
+
+`SOURCE_REPOSITORY_URL` adds an HTTPS source link to the landing page, signed-in
+footer, and About dialog. The local checkout still has no Git remote, so no URL
+was invented and no source push was claimed. Set it after creating the public
+repository. Production `AUTH_APP_URL` is configured for the stable Vercel domain.
+`RESEND_API_KEY` and `AUTH_EMAIL_FROM` are not configured yet, so email/password
+controls stay hidden in production until transactional email is available;
+Google sign-in remains configured. Secrets remain server-only.
+
+Verification for this pass: full lint and TypeScript passed; Vercel/Next and
+Vinext builds completed; 35 authentication, 33 avatar/history, and 242 isolated
+PostgreSQL assertions passed, including email registration/verification/reset,
+revision-note ownership, session revocation, concurrency, moderation, and
+deletion. A fresh release review fixed the replacement-session timestamp after a
+password reset, upgraded Next.js from 16.3.4 to 16.3.8 for the critical
+`ImageResponse` advisory, and left the production dependency audit at zero known
+vulnerabilities. Deployment `dpl_BL5tQS5wQghAsDUq5YBHyEs63fR3` is READY and
+aliased to `https://opendraft-workshop.vercel.app`. The checkout still has no Git
+remote, so the release was deployed directly through Vercel and no source push
+was performed.
+
+## Current pass: community, lifecycle, legal, and showcase
+
+The following supersedes the historical release notes below.
+
+Follow-up: the owner's supplied AI Gateway key is configured only in ignored
+local `.env` and Vercel's sensitive Production `AI_GATEWAY_API_KEY`. Values are
+trimmed before use; do not print or commit credentials. A synthetic Jev request
+passed using this key. Request badges now appear on Friends → Requests and the
+operator's Message reports / Contact & legal tabs, as well as navigation.
+Counts share the existing visible-tab notification poll; handled requests clear
+their originating badge. Pending counts exclude sent requests; operator counts
+are not exposed to ordinary members. Nine focused PostgreSQL assertions passed.
+
+Short nonempty critiques (including line-note-only feedback) are allowed below
+175 words with zero credits and no credit-earning ledger entry. At 175 words the
+existing base reward starts; every additional 100 words earns 0.5 reading-room
+credits (0.005/word), or 0.25 outside the room. UI status, submit tooltips, guide,
+earnings table and dashboard explain this and discourage padding. Empty and
+duplicate critiques remain rejected. Eleven focused credit-boundary assertions,
+TypeScript, and changed-file lint passed. No Jev critique-credit gate is enabled:
+current AI consent is for showcase manuscripts, and public ratings remain human.
+Deployment `dpl_Hc5TJm2z3o1WaQCJk863pB2NqxQV` is READY and aliased to
+`https://opendraft-workshop.vercel.app`; the production build passed.
+
+Operator: Tiernan Lindauer, individual side project in Texas, United States; no
+company. Contact email remains undecided and unpublished. Public terms/privacy/
+rights/contact pages and versioned acceptance are implemented. Contact and
+copyright complaints go privately to the operator inbox, with signed good-faith
+statements for copyright requests, not a claim of registered DMCA-agent status.
+
+New features: canonical-pair friendship requests and decisions; blocks and
+friends-only messages; reported-message evidence and reasoned moderation history;
+resolved-case evidence removal; export/deletion with old-session revocation;
+paginated version comparison plus version-specific critiques; recipient-only
+useful/specific/actionable ratings with combined critique scores and profile bars.
+Public ratings need ten counted votes from five distinct writers in twelve months
+with one vote per pair per fixed 30-day bucket. No credit rewards are attached.
+
+Daily showcase is per-work opt-in, human picked for one UTC day, with author
+cooldowns and genre rotation when eligible alternatives exist. Separate optional
+Jev consent allows Vercel AI Gateway evaluation only; scores stay operator-private.
+Model typesafe-ai/jev, three fixed criteria, 24-hour cache, five global requests/day.
+No-training routing and TypeSafe-only provider allowlisting are enabled. Real
+Gateway scoring passed with a synthetic passage. Zero-data-retention routing was
+rejected on the Hobby plan (requires Pro/Enterprise); it is not enabled or promised.
+Production uses the Vercel request OIDC token, local optional AI_GATEWAY_API_KEY.
+No new Google Cloud configuration is needed.
+
+Migrations 0012 and 0013 are applied to the existing Neon database. Active-member
+INSERT guards lock/check profiles so deletion cannot be bypassed by concurrent
+writes. Deletion retains content-free work references and others' feedback,
+restricted report evidence, session barriers and incoming blocks; fresh verified
+signup does not restore deleted writing or prior private message history.
+
+Verification: TypeScript and full lint passed; 215 main isolated PostgreSQL
+assertions plus 13 targeted lifecycle/retention/genre assertions passed; OAuth
+31 and avatar/history 33 assertions passed. GPT-6 Luna alone performed focused
+UI checks for friends/messages/reports/ratings/compare/showcase/account controls,
+with an in-memory fixture. Tailwind source discovery is now explicit, resolving
+the previous spurious binary selector warning. Deployment
+`dpl_HWpiwke8CbP1fraiNu1d2FwvRs8J` is READY and aliased to
+`https://opendraft-workshop.vercel.app`. The production Next build passed.
+Git has no remote; the owner was asked for a
+repository URL. Do not claim a source push until a remote is provided and succeeds.
+
+## Historical: autosave, messages, moderation history, and rights
+
+Private drafts now autosave after 1.5s idle with a 10s minimum interval. Saves
+accept incomplete title/request/content, return only ID and confirmation time,
+and spend no credits. The saved `created_at` timestamp is a compare-and-set token;
+stale tab/device writes are rejected. Publication locks the draft and validates
+the same timestamp before charging credits. Unsynced copies remain in per-user,
+per-draft local storage with an explicit recovery prompt. Saved untitled titles
+are canonicalized in the comparison; unchanged rich-editor blur events do not
+produce a spurious backup. Status, retry, recovery, close handling, and a local
+plain-text download are exposed in the editor. Reloading `#Editor` falls back to
+Your writing rather than rendering without an editor object.
+
+Messages use a desktop conversation list and thread, mobile back navigation,
+server-filtered unread pages, date separators, paginated earlier messages with
+scroll preservation, per-conversation tab-scoped reply drafts, and confirmed
+sent/read indicators. Quiet read receipts return a small unread count without a
+full workshop snapshot. Existing once-per-minute visible-tab notifications remain.
+Compose/send errors preserve text. Paged-list refresh callbacks are now stable.
+
+Migration `0011_burly_captain_marvel` adds report status/resolution/time and
+`admin_actions`. Applied successfully to Neon. Human moderation decisions require
+reasons where appropriate; dismissed reports retain context and feedback can be
+archived. Audit action requests include actor, time, target, reason, and small
+status/amount details, without copying manuscript/message bodies. Failed requests
+are logged too. Credit adjustments cannot make balances negative. Administrative
+withdrawal/restoration uses the shared reading-room promotion SQL and protects
+private drafts. Open/history filters and all lists are paginated.
+
+`/rights` explains retained user ownership, separation from MIT software licensing,
+the narrow operating permission, visibility, withdrawal/export, and copyright
+notices. It is an ownership explanation, not finalized operator terms. Formal
+terms/privacy/copyright contact and account deletion remain needed. Helpful marks
+are labeled as author appreciation rather than a star rating. The README records
+proposed reviewer rubric safeguards, opt-in daily curation, and Jev evaluation;
+no AI scoring, external manuscript transmission, or daily showcase was enabled.
+
+TypeScript and full ESLint passed. 138 isolated PostgreSQL integration assertions
+passed, including autosave conflicts and moderation history. All computer use was
+delegated only to GPT-6 Luna as the owner's standing preference requires. Luna
+verified incomplete autosave, Save now, reopen, no-credit charge, thread pagination,
+per-recipient draft preservation and send, unread filtering, and retained/centered
+search. The false untitled recovery prompt was fixed and its short recheck passed.
+The UI fixture writes only in memory; database tests use a temporary schema.
+This checkout still has no Git remote, so deployment is available but repository
+push needs an actual remote configured by the owner.
+
+Deployment `dpl_9uGRPTgSU5YpKSYEAcvByhyUyaAB` is READY and aliased to
+`https://opendraft-workshop.vercel.app`. Vercel's production build and TypeScript
+checks passed. The homepage and `/rights` return HTTP 200; production styles
+include the draft-save status and split messaging interface. The known Tailwind
+warning about a spurious binary-looking attribute selector is nonblocking and
+should be addressed by narrowing source discovery in a future maintenance pass.
+
+## Account and search polish
+
+The navbar now accepts and retains the shared search query. Search uses a dedicated
+top dialog placement with horizontal insets and auto margins; it no longer inherits
+Tailwind's centered-dialog translate utilities. The production optimizer removed
+the earlier `translate: none` override, leaving the input above the viewport.
+The isolated platform fixture now uses Lightning CSS minification and confirmed
+the results dialog and input remain below the header, centered exactly on the viewport.
+Results reset keyboard selection when a query resolves so Enter opens the first match.
+
+Account pictures are clickable and open a crop editor with a circular preview,
+dragging/touch, arrow-key positioning, a zoom slider, reset, replacement, and removal.
+The 256px PNG output still goes through the existing server SafeSearch and rate limits.
+Existing pictures can be zoomed/cropped further; wider framing requires the original
+file again because only the approved final crop is retained. Object URLs and bitmaps
+are released, and stale image loads cannot resurrect a closed dialog. The sidebar
+has a large, sticky bottom sign-out action with an icon-only layout on small screens.
+Focused isolated UI checks covered selecting a synthetic picture, zoom and position,
+saving, reopening, removing, and restoring initials. No real profile was modified.
+TypeScript, full lint, and focused lint passed. Deployment
+`dpl_47uXPsXJVFwQWP1iojb27PYG1nAJ` is READY and aliased to the production domain.
+The production URL returned HTTP 200 and its CSS contains the inset-based search,
+photo editor, and sidebar sign-out styles. This Git checkout has no configured
+remote; no repository push was made.
+
+## Vercel and platform continuation
+
+The owner requested production deployment through the Vercel CLI. The project is
+`opendraft-workshop` in `tiernan-lindauers-projects`, with the production domain
+`https://opendraft-workshop.vercel.app`. The owner confirmed registering its
+Google callback `/api/auth/callback`. Server-only Production variables were
+configured via CLI without printing credentials. Production uses a separate
+session signing secret. The existing local `.env` and callback are preserved.
+Deployment `dpl_Buc5kAK2CudwLzzhUvt2UN2RFmM4` is READY. The production address
+returns HTTP 200; the workshop API reports Google configured, anonymous reads
+contain no account data, forged legacy identity headers are rejected, and login
+uses the registered HTTPS callback with a Secure HttpOnly OAuth cookie. The
+temporary beta hostname was removed. No ChatGPT hosting is used.
+
+TypeScript and lint passed; 31 OAuth and 33 avatar/history checks passed. The
+existing 81 database checks passed, and expanded pagination/export checks reached
+the new bulletin path, exposing a timestamp type error. That was fixed with an
+explicit bigint cast and verified by six focused real-handler database checks.
+At the owner's request, broader UI testing was stopped and the app was deployed.
+
+Migrations 0009 and 0010 add durable rate counters, owner circle bulletins with
+per-member delivery/read state, cursor indexes, and GIN full-text search indexes.
+They are applied to the existing database. All list views have bounded cursor
+pages, dashboard totals use SQL aggregates, manuscript details enforce ownership,
+and full exports stream batches. Read transactions no longer take the exchange's
+global advisory lock. Notifications check tiny unread status once a minute while
+the tab is visible and on focus. README lists exact rate limits.
+
+Draft Edit now opens its full manuscript in the editor, and private drafts omit
+withdrawal and reader-stat controls. Search input is controlled separately from
+the command palette's selected item, and the modal uses one positioning transform.
+Dark mode uses shared text and surface tokens; message previews sit beneath the
+sender. Rich paste/drop strips active elements and attributes, preserving only
+bold, italic, underline, paragraphs and line breaks. Reader notes accept general
+context. Twelve genres cover fiction, nonfiction, poetry, drama and other writing.
+
+The repository already contained MIT LICENSE; package metadata, contributor and
+security guides, conduct rules, issue/PR templates, and GitHub checks are added.
+Feedback-quality rewards are deliberately left for the owner's future work.
+
+## Profile pictures and line-note continuation
+
+The owner explicitly authorized Google Cloud Vision SafeSearch for profile-picture
+screening, as a narrow exception to the older no-AI moderation rule. Billing is
+linked, Vision is enabled in `opendraft-workshop`, and its API-restricted key is
+only in ignored `.env`. Set `GOOGLE_VISION_API_KEY` on Vercel. Migration
+`0008_profile_pictures.sql` adds screened PNG storage and scan/update timestamps.
+New public identities use "Writer" until the member explicitly enters a pen name;
+onboarding never copies a Google name or picture. Fictional authors are excluded
+from message recipients, and send failures now show the actual error.
+Line comments keep a blue selection while typing, Escape cancels, and unsent
+annotation edits support undo/redo and session recovery. Clicking a saved note
+opens its text; a local unsent note also explains double-click removal.
+
+## Authentication continuation (2026-10-02)
+
+Google OAuth is now implemented in `lib/auth.ts` and `app/api/auth/`. The owner
+created a Web application client in the existing `opendraft-workshop` Google
+Cloud project. Its credentials are saved only in the ignored `.env`. Never print
+or commit them. Local callback: `http://127.0.0.1:5173/api/auth/callback`.
+The flow uses browser-bound state, PKCE, nonce and verified Google JWTs; signed
+HttpOnly sessions last thirty days. First sign-in creates a five-credit profile.
+Login begins on the configured callback host so localhost/127.0.0.1 aliases
+cannot lose OAuth cookies. Default successful sign-in opens `/#Dashboard`.
+First-time profile setup lives in `app/onboarding.tsx`, with a PostgreSQL
+`onboarding_completed` flag added by `0007_profile_onboarding.sql`. Only a display
+name is required. The flag is saved atomically with profile updates and persists
+across sign-ins. The additive migration has been applied to the local Neon DB.
+Production rejects the old identity headers. Loopback development can still use
+the legacy preview only when both Google credentials are absent.
+
+The owner plans to deploy to **Vercel**. `vercel.json` uses the Next.js build
+(`npm run build:vercel`); the existing Vinext development and Worker build remain
+available. The owner subsequently requested Vercel deployment; see the section
+above. README documents the Vercel
+root directory, server environment variables and the matching HTTPS Google
+callback URL. `ADMIN_EMAILS` must be explicitly set to grant admin access.
+
+`tests/auth.integration.mjs` tests authentication with generated keys and mocked
+Google endpoints. The workshop integration suite now applies every checked-in
+migration and uses a session adapter. Its expectations reflect the newer credit
+economy and per-genre spotlight rules. Withdrawal retains reviews and annotations
+for their author; private feedback and messages have privacy regression checks.
+The later sections below describe the earlier baseline; use README and current
+code for the latest feature set and economics.
 
 ## Read this first
 

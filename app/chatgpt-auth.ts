@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { localPreviewAllowed } from '@/lib/auth';
 
 export type ChatGPTUser = {
   userId: string;
@@ -20,6 +21,9 @@ const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
+  // Development middleware strips and supplies these headers; production uses signed sessions.
+  const host = requestHeaders.get('host') || '';
+  try { if (!localPreviewAllowed(`http://${host}`)) return null; } catch { return null; }
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!userId || !email) return null;

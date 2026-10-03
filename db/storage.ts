@@ -1,8 +1,7 @@
 import {neon, type NeonQueryFunction} from '@neondatabase/serverless';
-import {env} from 'cloudflare:workers';
 type Row=Record<string,unknown>;
 type Result={results:Row[];meta:{changes:number}};
-const numericColumns=new Set(['created_at','words','reviews','members','credits','version','reward','amount','helpful']);
+const numericColumns=new Set(['deleted_at','session_valid_after','terms_accepted_at','ai_assessed_at','email_verified_at','expires_at','last_used_at','usefulness','specificity','actionability','queue_position','avatar_updated_at','avatar_scan_at','updated_at','created_at','resolved_at','words','reviews','members','credits','version','reward','amount','helpful','views','age','first_viewed_at','last_viewed_at','start_pos','end_pos','para','current_streak','longest_streak','read_at','flagged']);
 function normalize(row:Row):Row{return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,numericColumns.has(k)&&typeof v==='string'?Number(v):v]));}
 function mapped(r:{rows:Row[];rowCount:number|null}):Result{return{results:r.rows.map(normalize),meta:{changes:r.rowCount||0}};}
 export class Statement{
@@ -28,9 +27,13 @@ export class Database{
  const result=await this.sql.transaction([this.sql.query('SET LOCAL search_path TO public'),this.sql.query('SELECT pg_advisory_xact_lock(6821941)'),...statements.map(s=>this.sql.query(s.sql,s.values))],{fullResults:true,isolationLevel:'ReadCommitted'});
  return result.slice(2).map(mapped);
  }
+ async read(statements:Statement[]):Promise<Result[]>{
+ const result=await this.sql.transaction([this.sql.query('SET LOCAL search_path TO public'),...statements.map(s=>this.sql.query(s.sql,s.values))],{fullResults:true});
+ return result.slice(1).map(mapped);
+ }
 }
 export function database(){
- const url=(env as unknown as Record<string,string|undefined>).DATABASE_URL||process.env.DATABASE_URL;
+ const url=process.env.DATABASE_URL;
  if(!url)throw new Error('DATABASE_URL is missing. Configure the Neon PostgreSQL connection.');
  return new Database(url);
 }

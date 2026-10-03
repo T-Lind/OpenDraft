@@ -1,0 +1,1 @@
+ALTER TABLE "works" ADD COLUMN "target_reviews" integer DEFAULT 2 NOT NULL;

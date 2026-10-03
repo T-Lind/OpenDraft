@@ -1,0 +1,14 @@
+.env*
+.sites-runtime/
+.next/
+.next-vercel/
+.vinext/
+.wrangler/
+dist/
+.dev-server*.log
+lint.json
+*.tsbuildinfo
+.agents/
+.codex/
+outputs/
+work/

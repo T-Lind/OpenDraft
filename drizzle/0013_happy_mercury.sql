@@ -1,0 +1,1 @@
+CREATE INDEX "idx_works_revision" ON "works" USING btree ("revision_of");

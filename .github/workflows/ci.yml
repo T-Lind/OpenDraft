@@ -1,0 +1,108 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  code-quality:
+    name: Types, lint, and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build:vercel
+      - run: npm audit --omit=dev --audit-level=high
+
+  postgres-integration:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: opendraft
+          POSTGRES_PASSWORD: opendraft
+          POSTGRES_DB: opendraft
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opendraft -d opendraft"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://opendraft:opendraft@127.0.0.1:5432/opendraft
+      TEST_DATABASE_URL: postgresql://opendraft:opendraft@127.0.0.1:5432/opendraft
+      AUTH_SECRET: ci-only-session-secret-that-is-at-least-32-characters
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  browser-e2e:
+    name: Browser end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: opendraft
+          POSTGRES_PASSWORD: opendraft
+          POSTGRES_DB: opendraft
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opendraft -d opendraft"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://opendraft:opendraft@127.0.0.1:5432/opendraft
+      TEST_DATABASE_URL: postgresql://opendraft:opendraft@127.0.0.1:5432/opendraft
+      AUTH_SECRET: ci-only-session-secret-that-is-at-least-32-characters
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run db:migrate
+      - run: npm run test:e2e
+      - name: Upload browser traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
