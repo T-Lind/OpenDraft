@@ -85,6 +85,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://opendraft:opendraft@127.0.0.1:5432/opendraft
       TEST_DATABASE_URL: postgresql://opendraft:opendraft@127.0.0.1:5432/opendraft
+      DATABASE_ADAPTER: pg
       AUTH_SECRET: ci-only-session-secret-that-is-at-least-32-characters
     steps:
       - uses: actions/checkout@v7
