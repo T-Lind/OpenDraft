@@ -4,7 +4,7 @@ import {
   BookOpen, Feather, LayoutGrid, Sparkles, FileText, MessageSquare, Users, User,
   Bookmark, CircleHelp, Plus, Search, SlidersHorizontal, ChevronRight, ChevronDown, BarChart3,
   CodeXml, LoaderCircle, Heart, X, MessageCircle, PenLine, Keyboard, Eye,
-  Sun, Moon, Flame, ShieldCheck, Bug, Lightbulb, Trash2, CheckCircle2, RotateCcw, AlertCircle, LogOut,
+  Sun, Moon, Flame, ShieldCheck, Bug, Lightbulb, Trash2, CheckCircle2, RotateCcw, AlertCircle, LogOut, MoreHorizontal,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
@@ -23,6 +23,7 @@ import { Onboarding } from './onboarding';
 import { WriterAvatar } from '@/components/writer-avatar';
 import { usePagedList,PageMore } from '@/components/paged-list';
 import {AuthDialog} from '@/components/auth-dialog';
+import { ReadingSettings, useReadingPreferences, prefersReducedMotion } from '@/components/reading-preferences';
 
 export type Snapshot = {
   user: { id: string; name: string; bio: string; credits: number; avatarUpdatedAt?: number; termsVersion?:string; friendsOnly?:boolean; onboardingCompleted?: boolean; age?: number | null; sex?: string; location?: string; interests?: string; currentStreak?: number; longestStreak?: number } | null;
@@ -42,6 +43,7 @@ export type Snapshot = {
   stats?:{works:number;words:number;given:number;received:number};
   unreadMessages?:number;
   revision?:number;
+  actionNotice?:string;
 };
 export type Act = (body: Record<string, unknown>, message?: string, onError?: (error: string) => void) => Promise<boolean>;
 
@@ -80,6 +82,10 @@ export default function Workshop() {
   const [genreFilter, setGenreFilter] = useState('All genres');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
+  const [toastError, setToastError] = useState(false);
+  const [toastPaused, setToastPaused] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const { preferences } = useReadingPreferences();
   const [authError, setAuthError] = useState('');
   const [editor, setEditor] = useState<Work | null>(null);
   const [about, setAbout] = useState(false);
@@ -126,6 +132,7 @@ export default function Workshop() {
     }
     const hash = () => {
       const h = decodeURIComponent(location.hash.slice(1));
+      if (h === 'main-content') return;
       if (h.startsWith('read/')) { setSelected(h.slice(5)); setView('Read & critique'); }
       else if (h.startsWith('story/')) { setSelected(h.slice(6)); setView('Story'); }
       else if (h.startsWith('author/')) { setSelected(h.slice(7)); setView('Author profile'); }
@@ -138,16 +145,18 @@ export default function Workshop() {
     return () => window.removeEventListener('hashchange', hash);
   }, [load]);
 
-  useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 5500); return () => clearTimeout(timer); }, [toast]);
+  useEffect(() => { if (!toast || toastError || toastPaused) return; const timer = setTimeout(() => setToast(''), 8000); return () => clearTimeout(timer); }, [toast, toastError, toastPaused]);
 
   const go = useCallback((v: string, id = '') => {
     setView(v);
     setSelected(id);
     location.hash = id ? (v === 'Author profile' ? 'author/' + id : v === 'Writing circles' ? 'circle/' + id : v === 'Story' ? 'story/' + id : v==='Messages'?'message/'+id:'read/' + id) : v;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setMoreOpen(false);
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
+    requestAnimationFrame(() => document.getElementById('main-content')?.focus({ preventScroll: true }));
   }, []);
   const openStory = useCallback((id: string) => go('Story', id), [go]);
-  const openAuthor = useCallback((id: string) => { if (!id) return; setView('Author profile'); setSelected(id); location.hash = 'author/' + id; window.scrollTo({ top: 0, behavior: 'smooth' }); }, []);
+  const openAuthor = useCallback((id: string) => { if (id) go('Author profile', id); }, [go]);
 
   useEffect(() => {
     const NAV: Record<string, string> = { d: 'Dashboard', e: 'Explore', w: 'My writing', m: 'Messages', a: 'Analytics', p: 'Your profile', s: 'Saved works', h: 'How it works' };
@@ -156,13 +165,14 @@ export default function Workshop() {
       const typing = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearchOpen(true); return; }
       if (typing) return;
+      if (!preferences.keyboardShortcuts || e.altKey || e.ctrlKey || e.metaKey) return;
       if (e.key === '?') { e.preventDefault(); setShortcutsOpen(true); return; }
       if (e.key.toLowerCase() === 'g' && !e.metaKey && !e.ctrlKey) { gPending.current = true; window.setTimeout(() => { gPending.current = false; }, 1300); return; }
       if (gPending.current && NAV[e.key.toLowerCase()]) { e.preventDefault(); gPending.current = false; go(NAV[e.key.toLowerCase()]); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go]);
+  }, [go, preferences.keyboardShortcuts]);
 
   const act: Act = async (body, message, onError) => {
     if (!data.user) { setLogin(true); return false; }
@@ -174,10 +184,10 @@ export default function Workshop() {
       if (!r.ok) { if (r.status === 401) setLogin(true); throw new Error(d.error); }
       setData(d);
       setRevision(n=>n+1);setNotificationCount(d.unreadMessages??null);
-      if (message) setToast(message);
+      if (d.actionNotice || message) { setToastError(false); setToast(d.actionNotice || message || 'Saved.'); }
       return true;
     } catch (e) {
-      setToast((e as Error).message || 'Could not save. Please try again.');
+      setToastError(true); setToast((e as Error).message || 'Could not save. Please try again.');
       onError?.((e as Error).message || 'Could not save. Please try again.');
       return false;
     } finally {
@@ -196,9 +206,10 @@ export default function Workshop() {
       const d = await r.json() as Snapshot;
       setData(d);
       setRevision(n=>n+1);
+      setToastError(false); setToast(savedNow ? 'Bookmark removed.' : 'Work saved to your reading list.');
     } catch (e) {
       setData(d => ({ ...d, bookmarks: previous }));
-      setToast((e as Error).message || 'Could not save your bookmark. Please try again.');
+      setToastError(true); setToast((e as Error).message || 'Could not save your bookmark. Please try again.');
     }
   }, [data.user, data.bookmarks]);
 
@@ -286,7 +297,8 @@ export default function Workshop() {
         <div className="topbar-actions">
           <button className="topbar-chip" onClick={() => go('Credit history')} title="Your credits"><Sparkles size={13} />{formatCredits(credits)}</button>
           <ThemeToggle />
-          <button className="topbar-chip" title="Keyboard shortcuts" aria-label="Keyboard shortcuts" onClick={() => setShortcutsOpen(true)}><Keyboard size={15} /></button>
+          <ReadingSettings compact />
+          <button className="topbar-chip shortcuts-trigger" title="Keyboard shortcuts" aria-label="Keyboard shortcuts" onClick={() => setShortcutsOpen(true)}><Keyboard size={15} /></button>
         </div>
       </header>
 
@@ -324,7 +336,7 @@ export default function Workshop() {
       </aside>
 
       <div className="main-shell">
-        <main id="main-content">
+        <main id="main-content" tabIndex={-1}>
           {loadError && <div className="error-banner" role="alert"><span>{loadError} Showing example stories until the workshop reconnects.</span><Button variant="outline" onClick={() => void load()}>Try again</Button></div>}
           {loading && <div className="loading-indicator" role="status"><LoaderCircle size={14} className="animate-spin" />Connecting to the workshop…</div>}
 
@@ -483,7 +495,7 @@ export default function Workshop() {
           {view === 'Messages' && <MessagesView initialWith={selected} data={{...data,revision,unreadMessages}} act={act} busy={busy} onAuthor={openAuthor} onOpenStory={openStory} onUnreadChange={setNotificationCount} />}
           {view === 'My critiques' && <><FeedbackList reviews={given} data={data} act={act} busy={busy} onRead={openStory} received={false} onExplore={() => go('Explore')} onAuthor={openAuthor} /><PageMore page={givenPage} label="More critiques" /></>}
           {view === 'Analytics' && <><AnalyticsView analytics={data.analytics?{...data.analytics,works:analyticsPage.items}:null} own={own} onRead={openStory} onWrite={newDraft} /><PageMore page={analyticsPage} label="More reader stats" /></>}
-          {view === 'Writing circles' && <div className="sheet"><div className="sheet-head"><h1>Writing circles</h1></div><div className="sheet-body"><Circles key={selected||'all'} initialSelected={selected} data={{...data,revision}} act={act} busy={busy} /></div></div>}
+          {view === 'Writing circles' && <div className="sheet"><div className="sheet-head"><h1>Writing circles</h1></div><div className="sheet-body"><Circles key={selected||'all'} initialSelected={selected} data={{...data,revision}} act={act} busy={busy} onOpenStory={openStory} onVisit={id=>go('Writing circles',id)}/></div></div>}
           {view === 'How it works' && <div className="sheet"><div className="sheet-head"><h1>How it works</h1></div><div className="sheet-body"><Guide onExplore={() => go('Explore')} onWrite={newDraft} onAbout={() => setAbout(true)} /></div></div>}
           {view === 'Your profile' && <div className="sheet"><div className="sheet-head"><h1>Your account</h1></div><div className="sheet-body"><Profile data={data} act={act} busy={busy} onSignIn={() => setLogin(true)} /></div></div>}
           {view === 'Admin' && data.isAdmin && <AdminView requestCounts={adminRequests} onOpenStory={openStory} onAuthor={openAuthor} />}
@@ -503,6 +515,21 @@ export default function Workshop() {
           <footer className="site-footer"><span>Made for the messy, wonderful process of writing.</span><Link href="/rights">Your writing &amp; your rights</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link><Link href="/contact">Contact</Link>{data.sourceRepositoryUrl&&<a href={data.sourceRepositoryUrl} target="_blank" rel="noreferrer">Source code</a>}<button onClick={() => setAbout(true)}>Always free. Always open.</button></footer>
         </main>
       </div>
+
+      <nav className="mobile-nav" aria-label="Mobile workshop navigation">
+        {[{ label: 'Home', view: 'Dashboard', icon: LayoutGrid, active: view === 'Dashboard' }, { label: 'Read', view: 'Explore', icon: BookOpen, active: ['Explore', 'Story', 'Read & critique'].includes(view) }, { label: 'Write', view: 'My writing', icon: FileText, active: ['My writing', 'Editor'].includes(view) }, { label: 'Inbox', view: 'Messages', icon: MessageSquare, active: view === 'Messages' }].map(({ label, view: destination, icon: Icon, active }) => <button key={label} type="button" className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} onClick={() => go(destination)}><span className="mobile-nav-icon"><Icon size={21}/>{destination === 'Messages' && unreadMessages > 0 && <span className="nav-badge" aria-label={`${unreadMessages} unread messages`}>{unreadMessages > 99 ? '99+' : unreadMessages}</span>}</span><span>{label}</span></button>)}
+        <button type="button" aria-label="More destinations" aria-haspopup="dialog" aria-expanded={moreOpen} className={!['Dashboard', 'Explore', 'Story', 'Read & critique', 'My writing', 'Editor', 'Messages'].includes(view) ? 'active' : ''} onClick={() => setMoreOpen(true)}><MoreHorizontal size={21}/><span>More</span></button>
+      </nav>
+      <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
+        <DialogContent className="compact-dialog mobile-more-dialog">
+          <DialogTitle>Your workshop</DialogTitle><DialogDescription>Circles, saved reading, account settings, and help.</DialogDescription>
+          <nav className="more-destinations" aria-label="More workshop destinations">
+            {[primaryNav[4], primaryNav[2], secondaryNav[2], secondaryNav[1], primaryNav[5], secondaryNav[3], secondaryNav[4], ...(data.isAdmin ? [{ icon: ShieldCheck, label: 'Admin dashboard', view: 'Admin' }] : [])].map(({ icon: Icon, label, view: destination }) => <button key={destination} type="button" onClick={() => go(destination)}><Icon size={20}/><span>{label}</span>{destination === 'Friends' && friendRequests > 0 && <span className="nav-badge">{friendRequests}</span>}<ChevronRight size={16}/></button>)}
+          </nav>
+          <ReadingSettings/>
+          <div className="more-help"><button type="button" className="text-link" onClick={() => { setMoreOpen(false); setFeedbackKind('bug'); }}><Bug size={16}/>Report a bug</button><button type="button" className="text-link" onClick={() => { setMoreOpen(false); setFeedbackKind('feature'); }}><Lightbulb size={16}/>Suggest a feature</button><a className="text-link" href="/api/auth/logout"><LogOut size={16}/>Sign out</a></div>
+        </DialogContent>
+      </Dialog>
 
       <SearchPalette open={searchOpen} onOpenChange={setSearchOpen} q={searchQuery} setQ={setSearchQuery} onSearch={q => { setSearch(q); setSearchOpen(false); go('Explore'); }} onRead={id => { setSearchOpen(false); openStory(id); }} onAuthor={id => { setSearchOpen(false); openAuthor(id); }} onCircle={id=>{setSearchOpen(false);go('Writing circles',id);}} />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
@@ -533,7 +560,9 @@ export default function Workshop() {
         </DialogContent>
       </Dialog>
 
-      {toast && <div className="toast" role="status"><MessageSquare size={15} /><span>{toast}</span><button aria-label="Dismiss notification" onClick={() => setToast('')}><X size={14} /></button></div>}
+      <div className="toast-announcer" role="status" aria-live="polite" aria-atomic="true">{!toastError ? toast : ''}</div>
+      <div className="toast-announcer" role="alert" aria-atomic="true">{toastError ? toast : ''}</div>
+      {toast && <div className={'toast' + (toastError ? ' toast-error' : '')} onMouseEnter={() => setToastPaused(true)} onMouseLeave={() => setToastPaused(false)} onFocus={() => setToastPaused(true)} onBlur={() => setToastPaused(false)}>{toastError ? <AlertCircle size={18}/> : <CheckCircle2 size={18}/>}<span>{toast}</span><button aria-label="Dismiss notification" onClick={() => { setToast(''); setToastPaused(false); }}><X size={16} /></button></div>}
 
       <div className="feedback-fab" role="group" aria-label="Report a bug or request a feature">
         <button className="fab-button" onClick={() => setFeedbackKind('bug')} title="Report a bug"><Bug size={15} /><span>Report a bug</span></button>

@@ -357,11 +357,17 @@ try{
  await action('friend-c',fullCritique('delete-manuscript'));
  r=await action('deleted-member',{action:'createCircle',circle:{name:'Deletion test circle',genre:'Other writing',description:'An isolated circle for ownership transfer.'}});ok(r.status===200,'deletion fixture circle creates successfully');
  const ownedCircle=(await query("SELECT id FROM circles WHERE owner_id='deleted-member'")).rows[0].id;
+ await action('deleted-member',{action:'updateWorkshop',circleId:ownedCircle,workshopPrompt:'A departing member’s prompt',workshopAgenda:'A personal session agenda',meetingPlace:'A personal meeting location',meetingAt:Date.now()+86400000,feedbackDueAt:0});
+ await action('deleted-member',{action:'addCircleReading',circleId:ownedCircle,workId:'delete-manuscript'});
+ await query("INSERT INTO works(id,author_id,author,title,genre,kind,stage,content,request,status,version,created_at,words,target_reviews) SELECT 'delete-reservation-target','alice','Alice','Delete reservation target',genre,kind,stage,content,request,'queued',1,$1,words,2 FROM works WHERE id='the-last-light'",[Date.now()]);
+ ok((await action('deleted-member',{action:'reserveCritique',workId:'delete-reservation-target'})).status===200,'deletion fixture holds a critique spot');
  await cAction('friend-a',{action:'block',id:'deleted-member'});
  ok((await cAction('deleted-member',{action:'deleteAccount',confirmation:'delete'})).status===400,'deletion requires exact explicit confirmation');
  ok((await cAction('deleted-member',{action:'deleteAccount',confirmation:'DELETE'})).status===200,'account deletion completes');
  const tombstone=(await query("SELECT * FROM profiles WHERE id='deleted-member'")).rows[0],removedWork=(await query("SELECT * FROM works WHERE id='delete-manuscript'")).rows[0];
  ok(tombstone.email===''&&tombstone.name==='Deleted writer'&&Number(tombstone.deleted_at)>0&&removedWork.content===''&&removedWork.author_id===''&&removedWork.status==='withdrawn','deletion removes personal profile and manuscript content');
+ ok((await query("SELECT COUNT(*)::int AS n FROM critique_reservations WHERE user_id='deleted-member'")).rows[0].n===0&&(await query("SELECT COUNT(*)::int AS n FROM circle_readings WHERE added_by='deleted-member'")).rows[0].n===0,'deletion removes critique reservations and shared reading contributions');
+ ok((await query('SELECT workshop_prompt,meeting_place FROM circles WHERE id=$1',[ownedCircle])).rows[0].workshop_prompt==='','deletion clears departed owner’s pinned workshop text');
  ok((await read('deleted-member')).status===401&&(await cRead('deleted-member',{section:'status'})).status===401,'old session cannot resurrect a deleted account');
  ok((await identity.run(user('deleted-member'),()=>exportAPI.GET())).status===401&&(await identity.run(user('deleted-member'),()=>notifications.GET())).status===401,'old session is denied export and notification APIs');
  ok((await read('friend-c')).data.reviews.some(review=>review.workId==='delete-manuscript'),'independent critique remains visible to its reviewer through a content-free reference');
@@ -369,6 +375,8 @@ try{
  ok((await cAction('alice',{action:'adoptCircle',id:ownedCircle,reason:'Preserving this circle for its remaining members.'})).status===200,'operator can adopt a circle after owner deletion');
  let lateInsertDenied=false;try{await query("INSERT INTO messages(id,sender_id,sender,recipient_id,recipient,body,created_at) VALUES('late-deleted-message','deleted-member','Removed','friend-a','Writer','Late message',$1)",[Date.now()]);}catch(e){lateInsertDenied=e.code==='42501';}
  ok(lateInsertDenied,'database trigger rejects an in-flight insertion by deleted member');
+ let lateHoldDenied=false;try{await query("INSERT INTO critique_reservations(user_id,work_id,version,started_at,expires_at) VALUES('deleted-member','delete-reservation-target',1,$1,$2)",[Date.now(),Date.now()+1800000]);}catch(e){lateHoldDenied=e.code==='42501';}
+ ok(lateHoldDenied,'database trigger rejects an in-flight reservation by a deleted member');
  const fresh=await identity.run({...user('deleted-member'),issuedAt:Number(tombstone.session_valid_after)},async()=>{const response=await api.GET();return{status:response.status,data:await response.json()};});
  ok(fresh.status===200&&fresh.data.user.onboardingCompleted===false&&fresh.data.user.credits===5,'fresh verified sign-in starts a new empty profile');
  ok((await read('deleted-member')).status===401,'old tokens remain revoked even after fresh-account creation');
@@ -376,6 +384,54 @@ try{
  await read('session-revoke');
  ok((await cAction('session-revoke',{action:'revokeSessions'})).status===200,'member can sign out every device');
  ok((await read('session-revoke')).status===401,'session revocation immediately rejects the current signed token');
+
+ // Workshop plans are owner-managed; shared reading never exposes private drafts.
+ r=await action('workshop-owner',{action:'createCircle',circle:{name:'A workshop integration table',description:'An isolated group for workshop privacy and permission tests.',genre:'Other writing'}});
+ const workshopId=r.data.circles.find(c=>c.name==='A workshop integration table').id;
+ const brief={action:'updateWorkshop',circleId:workshopId,workshopPrompt:'Read for shifts in voice.',workshopAgenda:'Check in, close read, revision plan.',meetingPlace:'Synthetic workshop room',meetingAt:Date.now()+86400000,feedbackDueAt:Date.now()+43200000};
+ ok((await action('workshop-owner',brief)).status===200,'owner pins prompt, agenda, meeting, and deadline');
+ ok((await action('workshop-outsider',{...brief,workshopPrompt:'Hijacked'})).status===403,'outsider cannot alter a workshop brief');
+ ok((await page('workshop-owner',{collection:'circle',id:workshopId})).data.circle.meetingAt===brief.meetingAt,'workshop schedule round-trips as a numeric UTC timestamp');
+ await action('workshop-member',{action:'join',circleId:workshopId,joined:true});
+ ok((await action('workshop-member',{...brief,workshopPrompt:'Hijacked'})).status===403,'member cannot alter owner-managed workshop plans');
+ ok((await action('workshop-outsider',{action:'addCircleReading',circleId:workshopId,workId:'the-last-light'})).status===409,'nonmember cannot add a workshop reading');
+ ok((await action('workshop-member',{action:'addCircleReading',circleId:workshopId,workId:'page-000'})).status===409,'private manuscripts cannot be attached to circle readings');
+ ok((await action('workshop-member',{action:'addCircleReading',circleId:workshopId,workId:'the-last-light'})).status===200,'member adds an available published work');
+ ok((await page('workshop-outsider',{collection:'circleReadings',id:workshopId})).status===403,'reading-list endpoint requires membership');
+ const shared=(await page('workshop-member',{collection:'circleReadings',id:workshopId})).data.items;
+ ok(shared.length===1&&shared[0].workId==='the-last-light'&&!('content' in shared[0]),'circle readings return bounded metadata, not manuscript content');
+ ok((await action('workshop-outsider',{action:'removeCircleReading',circleId:workshopId,readingId:shared[0].id})).status===403,'outsider cannot remove a reading');
+ await action('workshop-other',{action:'join',circleId:workshopId,joined:true});
+ ok((await action('workshop-other',{action:'removeCircleReading',circleId:workshopId,readingId:shared[0].id})).status===403,'other members cannot remove someone else’s reading');
+ ok((await action('workshop-owner',{action:'removeCircleReading',circleId:workshopId,readingId:shared[0].id})).status===200,'circle owner can curate the shared reading list');
+
+ // Reservation acquisition and review submission share the database exchange lock.
+ await query("INSERT INTO works(id,author_id,author,title,genre,kind,stage,content,request,status,version,created_at,words,target_reviews) SELECT 'reservation-fixture','alice','Alice','Reservation fixture',genre,kind,stage,content,request,'spotlight',1,$1,words,1 FROM works WHERE id='the-last-light'",[Date.now()]);
+ const claims=await Promise.all(['holder-a','holder-b'].map(id=>action(id,{action:'reserveCritique',workId:'reservation-fixture'})));
+ ok(claims.filter(result=>result.status===200).length===1&&claims.filter(result=>result.status===409).length===1,'only one of two concurrent readers can claim the final spot');
+ const holder=claims[0].status===200?'holder-a':'holder-b',loser=holder==='holder-a'?'holder-b':'holder-a';
+ const held=claims.find(result=>result.status===200).data;
+ ok(held.mine.workId==='reservation-fixture'&&held.mine.expiresAt-held.mine.startedAt===30*60000,'new hold lasts thirty minutes');
+ const outsiderStatus=(await page(loser,{collection:'critiqueReservation',id:'reservation-fixture'})).data;
+ ok(outsiderStatus.holds===1&&outsiderStatus.available===0&&outsiderStatus.mine===null,'another reader sees availability without holder identity or draft');
+ ok((await action(holder,{action:'reserveCritique',workId:'room-number-four'})).status===409,'one member cannot hold two works');
+ const swoop={...fullCritique('reservation-fixture'),review:{...fullCritique('reservation-fixture').review,annotations:[{kind:'comment',quote:'',body:'Attempted swoop note',para:0,start:0,end:0}]}};
+ ok((await action(loser,swoop)).status===409,'unreserved submission cannot take a held final spot');
+ ok((await query("SELECT COUNT(*)::int AS n FROM reviews WHERE work_id='reservation-fixture'")).rows[0].n===0,'rejected swoop creates no critique or reward');
+ await query('UPDATE critique_reservations SET started_at=$1 WHERE user_id=$2',[Date.now()-85*60000,holder]);
+ const renewedHold=(await action(holder,{action:'renewCritique',workId:'reservation-fixture'})).data.mine;
+ ok(renewedHold.expiresAt===renewedHold.startedAt+90*60000,'active renewal cannot exceed the ninety-minute cap');
+ await query('UPDATE critique_reservations SET expires_at=$1 WHERE user_id=$2',[Date.now()-1,holder]);
+ ok((await action(holder,{action:'renewCritique',workId:'reservation-fixture'})).data.mine===null,'renewal cannot resurrect an expired spot');
+ ok((await action(loser,{action:'reserveCritique',workId:'reservation-fixture'})).status===200,'expired spot is available to another reader');
+ ok((await action(loser,{action:'releaseCritique',workId:'reservation-fixture'})).data.mine===null,'reviewer can explicitly release a spot');
+ ok((await action(holder,{action:'reserveCritique',workId:'reservation-fixture'})).status===200,'a released spot can be claimed again');
+ r=await action(holder,fullCritique('reservation-fixture'));
+ ok(r.status===200&&r.data.actionNotice.includes('earned'),'reserved critique commits and reports the actual server reward');
+ ok((await query('SELECT COUNT(*)::int AS n FROM critique_reservations WHERE user_id=$1',[holder])).rows[0].n===0,'submission releases the reviewer’s hold');
+ ok((await action('reservation-late',fullCritique('reservation-fixture'))).status===200,'additional feedback remains welcome after requested slots are filled');
+ ok((await action('reservation-late',{action:'reserveCritique',workId:'reservation-fixture'})).status===409,'completed work cannot be reserved again');
+ ok((await page(loser,{collection:'critiqueReservation',id:'page-000'})).status===404,'reservation status does not expose private manuscripts');
 
  // Short feedback stays welcome; the word threshold controls earnings only.
  await query("INSERT INTO works(id,author_id,author,title,genre,kind,stage,content,request,status,version,created_at,words,target_reviews) SELECT 'short-feedback-fixture','alice','Alice','Short feedback fixture',genre,kind,stage,content,request,'spotlight',1,$1,words,5 FROM works WHERE id='the-last-light'",[Date.now()]);

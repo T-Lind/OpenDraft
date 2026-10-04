@@ -2,7 +2,54 @@
 
 Date: 2026-10-03
 
-## Current pass: mobile critique, revision loop, auth, and AI policy
+## Current pass: mobile reading, workshops, and critique reservations
+
+Migration `0015_outstanding_black_panther` adds owner-managed workshop brief fields
+to circles, `circle_readings`, and `critique_reservations`. Apply it before deploying
+this version. The new insert guards use the existing active-member database
+function; account deletion removes these records and clears owned-circle briefs.
+The repository is now connected to https://github.com/T-Lind/OpenDraft on `main`.
+GitHub CI runs code quality, PostgreSQL integration, and Playwright browser flows
+against disposable databases. Older entries below saying “no remote” or describing
+right-hand annotation cards are historical and no longer describe the current UI.
+Production is https://opendraft-workshop.vercel.app; Vercel deployments remain
+manual until the owner grants the Vercel GitHub App repository access.
+
+Mobile navigation is now a separate five-item bottom bar, with a More dialog for
+circles, friends, saved works, critiques, account, analytics, help, and admin.
+Phone-sized annotation tools are labeled and sit above the bottom bar; comment
+entry tracks the visual viewport to avoid the on-screen keyboard. Settings and
+dialogs use 44px touch controls. Desktop navigation remains intact.
+
+`components/reading-preferences.tsx` persists sanitized reading/accessibility
+settings in `opendraft:reading-preferences:v1` localStorage and synchronizes tabs.
+Manuscript font, size, spacing, and line length apply to reading and the settings
+preview. Higher contrast, link underlines, reduced motion, and single-key shortcut
+preferences apply platform-wide. OS reduced motion is always respected. Theme
+continues to use next-themes' `theme` key. Settings are per-browser, not account
+synced. Reader and story pages include reading focus and easy settings access.
+
+`components/circle-workshop.tsx` shows a pinned prompt, agenda, UTC meeting/deadline
+times localized for each member, shareable circle link, and a maximum 24 published
+readings. Only owners edit the brief; members add readings, and the adder or owner
+may remove them. No private drafts can be attached. Reading-list metadata requires
+membership; circle briefs/discussion remain open to signed-in workshop members.
+
+`lib/critique-reservations.ts` and `components/critique-reservation.tsx` implement
+explicit 30-minute holds, active-edit renewal up to 90 minutes, one hold per member,
+and release. Claim and submit use the same existing PostgreSQL exchange lock. The
+review INSERT atomically respects other live holds and computes rewards from the
+current server work status, not a stale client estimate. A failed/expired claim
+does not delete sessionStorage critique text. Extra critiques after requested
+feedback are still permitted at the existing half rate. No cron is required:
+expiry is evaluated in every capacity check, and stale rows are cleaned on claim.
+
+Tests add actual API reservation races, expiry/cap/release, privacy, owner/member
+permissions, and a mobile Playwright flow covering persisted settings, navigation,
+circle schedule/reading-list creation, and reload. The isolated fixture runs on
+http://127.0.0.1:5182 and must be restarted after code edits; it never writes live data.
+
+## Previous pass: mobile critique, revision loop, auth, and AI policy
 
 Migration `0014_faulty_living_mummy` is applied to the production Neon database.
 It adds verified email/password account

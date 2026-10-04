@@ -9,6 +9,7 @@ import { member,canContact,requireTerms,TERMS_VERSION } from '@/lib/member';
 import { savePrivateDraft,revisionVersion } from '@/lib/draft-save';
 import { promoteSQL } from '@/lib/reading-room';
 import {emailPasswordConfigured} from '@/lib/password-auth';
+import { changeReservation, availableCritiqueSlot } from '@/lib/critique-reservations';
 
 export const dynamic = 'force-dynamic';
 
@@ -197,7 +198,7 @@ export async function POST(request: Request) {
     const raw = await request.text();
     if (raw.length > 410000) return json({ error: 'This submission is too large.' }, 413);
     const b = JSON.parse(raw);
-    if(!b||!['uploadAvatar','removeAvatar','saveDraft','autosaveDraft','publish','review','annotationResponse','bookmark','view','withdraw','join','createCircle','post','bulletin','profile','completeOnboarding','helpful','sendMessage','readMessage','report','feedback'].includes(b.action))bad('Unknown workshop action.');
+    if(!b||!['uploadAvatar','removeAvatar','saveDraft','autosaveDraft','publish','review','annotationResponse','bookmark','view','withdraw','join','createCircle','post','bulletin','profile','completeOnboarding','helpful','sendMessage','readMessage','report','feedback','updateWorkshop','addCircleReading','removeCircleReading','reserveCritique','renewCritique','releaseCritique'].includes(b.action))bad('Unknown workshop action.');
     if (b.action !== 'uploadAvatar' && raw.length > 200000) return json({ error: 'This submission is too large.' }, 413);
     const db = database();
     const user = await identity(db,b.action !== 'autosaveDraft');
@@ -211,8 +212,12 @@ export async function POST(request: Request) {
     if (!p) bad('Please sign in again.', 401);
     if (!['view', 'bookmark', 'readMessage'].includes(b.action)) await touchStreak(db, uid, now);
 
-    if(['publish','review','createCircle','post','bulletin','sendMessage'].includes(b.action))requireTerms(p!);
-    if (b.action === 'uploadAvatar') {
+    if(['publish','review','createCircle','post','bulletin','sendMessage','updateWorkshop','addCircleReading','reserveCritique'].includes(b.action))requireTerms(p!);
+    let actionNotice = '';
+    if (['reserveCritique','renewCritique','releaseCritique'].includes(b.action)) {
+      const workId=z.string().min(1).max(100).parse(b.workId);
+      return json(await changeReservation(db,uid,workId,b.action,now));
+    } else if (b.action === 'uploadAvatar') {
       const image = z.string().max(405000).parse(b.image);
       try { avatarPng(image); } catch (e) { bad((e as Error).message); }
       const allowed = await db.prepare('UPDATE profiles SET avatar_scan_at=? WHERE id=? AND avatar_scan_at<?').bind(now, uid, now - 30_000).run();
@@ -258,20 +263,20 @@ export async function POST(request: Request) {
       if (w.author_id === uid) bad('You cannot earn credits by critiquing your own work.');
       if (r.quote && !w.content.includes(r.quote)) bad('The selected passage is no longer in this draft.');
       if (await db.prepare('SELECT id FROM reviews WHERE work_id=? AND user_id=? AND version=?').bind(r.workId, uid, w.version).first()) bad('You have already critiqued this version.', 409);
-      const base = w.status === 'spotlight' ? 1 : 0.5;
-      const perWord = w.status === 'spotlight' ? 0.005 : 0.0025;
-      const reward = count < 175 ? 0 : Math.round((base + (count - 175) * perWord) * 1000) / 1000;
       const id = crypto.randomUUID();
-      const annotationStatements = r.annotations.map(a => db.prepare('INSERT INTO annotations(id,review_id,work_id,user_id,author,kind,quote,body,para,start_pos,end_pos,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), id, r.workId, uid, p.name, a.kind, a.quote, a.body, a.para, a.start, a.end, now));
+      const annotationStatements = r.annotations.map(a => db.prepare('INSERT INTO annotations(id,review_id,work_id,user_id,author,kind,quote,body,para,start_pos,end_pos,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM reviews WHERE id=?)').bind(crypto.randomUUID(), id, r.workId, uid, p.name, a.kind, a.quote, a.body, a.para, a.start, a.end, now,id));
       const critiqueResult = await db.batch([
-        db.prepare("INSERT INTO reviews(id,work_id,user_id,author,strengths,suggestions,overall,annotation,quote,process_disclosure,attested,version,reward,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,version,?,? FROM works WHERE id=? AND version=? AND author_id<>? AND status NOT IN ('draft','withdrawn')").bind(id, r.workId, uid, p.name, r.strengths, r.suggestions, r.overall, r.annotation, r.quote,r.processDisclosure,r.attested, reward, now, r.workId, w.version, uid),
+        db.prepare(`INSERT INTO reviews(id,work_id,user_id,author,strengths,suggestions,overall,annotation,quote,process_disclosure,attested,version,reward,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,version,CASE WHEN ?<175 THEN 0 ELSE ROUND(((CASE WHEN status='spotlight' THEN 1 ELSE 0.5 END)*(1+(?-175)*0.005))::numeric,3) END,? FROM works WHERE id=? AND version=? AND author_id<>? AND status NOT IN ('draft','withdrawn') AND ${availableCritiqueSlot} RETURNING reward`).bind(id, r.workId, uid, p.name, r.strengths, r.suggestions, r.overall, r.annotation, r.quote,r.processDisclosure,r.attested,count,count,now,r.workId,w.version,uid,now,uid),
         db.prepare('UPDATE profiles SET credits=credits+COALESCE((SELECT reward FROM reviews WHERE id=?),0) WHERE id=?').bind(id, uid),
         db.prepare('INSERT INTO credit_events(id,user_id,amount,reason,created_at) SELECT ?,?,reward,?,? FROM reviews WHERE id=? AND reward>0').bind(id, uid, 'Critiqued ' + w.title, now, id),
         ...annotationStatements,
+        db.prepare('DELETE FROM critique_reservations WHERE user_id=? AND work_id=? AND EXISTS(SELECT 1 FROM reviews WHERE id=?)').bind(uid,r.workId,id),
         db.prepare("UPDATE works SET status='open' WHERE status IN ('spotlight','queued') AND (SELECT COUNT(*) FROM reviews r WHERE r.work_id=works.id AND r.version=works.version)>=COALESCE(target_reviews,2)"),
         db.prepare(promoteSQL),
       ]);
-      if (!critiqueResult[0].meta.changes) bad('This work is no longer available for critique.', 409);
+      if (!critiqueResult[0].meta.changes) bad('The remaining requested critique spots are held by other readers, or this work changed. Your draft is safe; wait for a spot or try another work.', 409);
+      const earned=Number(critiqueResult[0].results[0].reward);
+      actionNotice=earned ? `Critique shared. You earned ${earned.toLocaleString(undefined,{maximumFractionDigits:3})} credits.` : 'Critique shared. Thank you for helping this writer. This shorter critique earned no credits.';
     } else if(b.action==='annotationResponse'){
       const input=z.object({annotationId:z.string().max(100),status:z.enum(['open','resolved','kept','not-this-draft']),response:z.string().trim().max(500).default('')}).parse(b);
       const changed=await db.prepare('UPDATE annotations a SET writer_status=?,writer_response=? FROM works w WHERE a.id=? AND w.id=a.work_id AND w.author_id=?').bind(input.status,input.response,input.annotationId,uid).run();
@@ -291,7 +296,7 @@ export async function POST(request: Request) {
       return json({ ok: true });
     } else if (b.action === 'withdraw') {
       const id = z.string().max(100).parse(b.workId);
-      const result = await db.batch([db.prepare("UPDATE works SET status='withdrawn' WHERE id=? AND author_id=? AND status<>'withdrawn'").bind(id, uid), db.prepare(promoteSQL)]);
+      const result = await db.batch([db.prepare("UPDATE works SET status='withdrawn' WHERE id=? AND author_id=? AND status<>'withdrawn'").bind(id, uid), db.prepare("DELETE FROM critique_reservations WHERE work_id=? AND EXISTS(SELECT 1 FROM works WHERE id=? AND author_id=? AND status='withdrawn')").bind(id,id,uid), db.prepare("DELETE FROM circle_readings WHERE work_id=? AND EXISTS(SELECT 1 FROM works WHERE id=? AND author_id=? AND status='withdrawn')").bind(id,id,uid), db.prepare(promoteSQL)]);
       if (!result[0].meta.changes) bad('Work not found.', 404);
     } else if (b.action === 'join') {
       const id = z.string().max(100).parse(b.circleId);
@@ -302,6 +307,18 @@ export async function POST(request: Request) {
       const c = z.object({ name: z.string().trim().min(3).max(80), description: z.string().trim().min(15).max(600), genre: z.enum(genres.slice(1) as [string, ...string[]]) }).parse(b.circle);
       const id = crypto.randomUUID();
       await db.batch([db.prepare('INSERT INTO circles(id,name,description,genre,owner_id) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING').bind(id, c.name, c.description, c.genre, uid), db.prepare('INSERT INTO memberships(id,user_id,circle_id) VALUES(?,?,?) ON CONFLICT DO NOTHING').bind(crypto.randomUUID(), uid, id)]);
+    } else if (b.action === 'updateWorkshop') {
+      const input=z.object({circleId:z.string().min(1).max(100),workshopPrompt:z.string().trim().max(1200),workshopAgenda:z.string().trim().max(2000),meetingPlace:z.string().trim().max(240),meetingAt:z.number().int().min(0).max(4102444800000),feedbackDueAt:z.number().int().min(0).max(4102444800000)}).parse(b);
+      const result=await db.prepare('UPDATE circles SET workshop_prompt=?,workshop_agenda=?,meeting_place=?,meeting_at=?,feedback_due_at=? WHERE id=? AND owner_id=?').bind(input.workshopPrompt,input.workshopAgenda,input.meetingPlace,input.meetingAt,input.feedbackDueAt,input.circleId,uid).run();
+      if(!result.meta.changes)bad('Only the circle owner can edit the workshop brief.',403);
+    } else if (b.action === 'addCircleReading') {
+      const circleId=z.string().min(1).max(100).parse(b.circleId),workId=z.string().min(1).max(100).parse(b.workId);
+      const result=await db.batch([db.prepare("INSERT INTO circle_readings(id,circle_id,work_id,added_by,created_at) SELECT ?,?,w.id,?,? FROM works w WHERE w.id=? AND w.status NOT IN ('draft','withdrawn') AND EXISTS(SELECT 1 FROM memberships WHERE circle_id=? AND user_id=?) AND (SELECT COUNT(*) FROM circle_readings WHERE circle_id=?)<24 ON CONFLICT(circle_id,work_id) DO NOTHING").bind(crypto.randomUUID(),circleId,uid,now,workId,circleId,uid,circleId)]);
+      if(!result[0].meta.changes)bad('Join the circle and choose an available published work not already on the list. Each circle can hold up to 24 readings.',409);
+    } else if (b.action === 'removeCircleReading') {
+      const circleId=z.string().min(1).max(100).parse(b.circleId),readingId=z.string().min(1).max(100).parse(b.readingId);
+      const result=await db.prepare('DELETE FROM circle_readings cr WHERE cr.id=? AND cr.circle_id=? AND EXISTS(SELECT 1 FROM memberships WHERE circle_id=cr.circle_id AND user_id=?) AND (cr.added_by=? OR EXISTS(SELECT 1 FROM circles WHERE id=cr.circle_id AND owner_id=?))').bind(readingId,circleId,uid,uid,uid).run();
+      if(!result.meta.changes)bad('Only the member who added this reading or the circle owner can remove it.',403);
     } else if (b.action === 'post') {
       const id = z.string().max(100).parse(b.circleId), body = z.string().trim().min(5).max(5000).parse(b.body);
       if (!await db.prepare('SELECT id FROM memberships WHERE user_id=? AND circle_id=?').bind(uid, id).first()) bad('Join this circle before posting.', 403);
@@ -370,7 +387,7 @@ export async function POST(request: Request) {
       await db.prepare('INSERT INTO feedback(id,user_id,email,kind,body,page,status,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), uid, user.email || '', kind, body, page, 'open', now).run();
     } else bad('Unknown workshop action.');
 
-    return json({ ...(await snapshot(db, uid)), isAdmin: isAdminEmail(user.email), googleConfigured: googleConfigured(),emailPasswordConfigured:emailPasswordConfigured(),sourceRepositoryUrl:sourceRepositoryUrl() });
+    return json({ ...(await snapshot(db, uid)), actionNotice, isAdmin: isAdminEmail(user.email), googleConfigured: googleConfigured(),emailPasswordConfigured:emailPasswordConfigured(),sourceRepositoryUrl:sourceRepositoryUrl() });
   } catch (e) {
     if (e instanceof z.ZodError) return json({ error: e.issues[0]?.message || 'Please check your submission.' }, 400);
     const err = e as Error & { status?: number;retryAfter?:number };

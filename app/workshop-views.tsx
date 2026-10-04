@@ -21,6 +21,9 @@ import {ShowcaseConsent} from '@/components/showcase';
 import {RevisionCompare} from '@/components/revision-compare';
 import {communityAction} from '@/hooks/use-community';
 import { useDraftAutosave } from '@/hooks/use-draft-autosave';
+import { ReadingSettings, useReadingPreferences, prefersReducedMotion } from '@/components/reading-preferences';
+import { CritiqueReservation, useCritiqueReservation } from '@/components/critique-reservation';
+import { CircleWorkshop } from '@/components/circle-workshop';
 
 function FieldSelect({ label, value, options, change }: { label: string; value: string; options: string[]; change: (v: string) => void }) {
   return <label className="field-label">{label}<select className="form-select" value={value} onChange={e => change(e.target.value)}>{options.map(o => <option key={o}>{o}</option>)}</select></label>;
@@ -367,6 +370,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
   const paragraphs = useMemo(() => content.split('\n\n'), [content]);
   const plains = useMemo(() => paragraphs.map(p => { const runs = inlineRuns(p); return { runs, plain: runs.map(run => run.text).join('') }; }), [paragraphs]);
   const rootRef = useRef<HTMLDivElement>(null);
+  const { preferences } = useReadingPreferences();
   const [pending, setPending] = useState<Pending | null>(null);
   const [mode, setMode] = useState<ToolMode>('menu');
   const [draft, setDraft] = useState('');
@@ -385,11 +389,27 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
     const info = selectionInfo(rootRef.current, plains.map(p => p.plain));
     if (!info) { setPending(null); return; }
     if (info.collapsed) {
+      if (window.matchMedia('(pointer: coarse)').matches) return;
       setInlineInsert({ para: info.para, offset: info.start, start: info.start, end: info.start, quote: '' });
       setPending(null); setMode('menu'); setDraft('');
       return;
     }
     setInlineInsert(null); setPending(info); setMode('menu'); setDraft('');
+  }, [canAnnotate, plains]);
+
+  useEffect(() => {
+    if (!canAnnotate) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const selected = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!rootRef.current || document.activeElement?.closest('.annotate-pop')) return;
+        const info = selectionInfo(rootRef.current, plains.map(p => p.plain));
+        if (info && !info.collapsed) { setInlineInsert(null); setPending(info); setMode('menu'); setDraft(''); }
+      }, 180);
+    };
+    document.addEventListener('selectionchange', selected);
+    return () => { clearTimeout(timer); document.removeEventListener('selectionchange', selected); };
   }, [canAnnotate, plains]);
 
   const commitComment = useCallback(() => {
@@ -444,7 +464,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
       if (e.key === 'Escape') { e.preventDefault(); clear(); return; }
       if (mode === 'comment') { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commitComment(); } return; }
       const k = e.key.toLowerCase();
-      if (e.ctrlKey || e.metaKey || (e.target as Element)?.closest('input, textarea, [contenteditable="true"]')) return;
+      if (!preferences.keyboardShortcuts || e.altKey || e.ctrlKey || e.metaKey || (e.target as Element)?.closest('input, textarea, [contenteditable="true"]')) return;
       if (k === 'h') { e.preventDefault(); applyKind('highlight'); }
       else if (k === 'c') { e.preventDefault(); applyKind('comment'); }
       else if (k === 'd') { e.preventDefault(); applyKind('delete'); }
@@ -452,7 +472,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [pending, mode, clear, commitComment, applyKind]);
+  }, [pending, mode, clear, commitComment, applyKind, preferences.keyboardShortcuts]);
 
   const visibleAnnotations = pending && mode === 'comment' ? [...annotations, { ...pending, id: '__pending__', workId: '', userId: '', author: 'You', kind: 'comment' as const, body: '', createdAt: 0 }] : annotations;
   const selectNote = (annotation: WorkAnnotation) => {
@@ -466,7 +486,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
         <div className="annotate-hint">
           <Highlighter size={13} />
           <span>Select text for line notes, or click in the text to add words.</span>
-          <span className="annotate-hint-keys"><Kbd>H</Kbd> highlight <Kbd>C</Kbd> comment <Kbd>D</Kbd> delete <Kbd>I</Kbd> addition</span>
+          {preferences.keyboardShortcuts && <span className="annotate-hint-keys"><Kbd>H</Kbd> highlight <Kbd>C</Kbd> comment <Kbd>D</Kbd> delete <Kbd>I</Kbd> addition</span>}
           <div className="annotation-history"><Button size="sm" variant="ghost" disabled={!canUndo} onClick={() => { clear(); onUndo?.(); }}>Undo</Button><Button size="sm" variant="ghost" disabled={!canRedo} onClick={() => { clear(); onRedo?.(); }}>Redo</Button></div>
         </div>
       )}
@@ -475,11 +495,11 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
       </div>
 
       {pending && mode === 'menu' && (
-        <div className="annotate-rail" style={{ left: pending.left, top: pending.top }} role="toolbar" aria-label="Inline critique tools">
-          <button type="button" className="annotate-rail-btn hl" onClick={() => applyKind('highlight')} title="Highlight (H)"><Highlighter size={15} /><Kbd>H</Kbd></button>
-          <button type="button" className="annotate-rail-btn cm" onClick={() => applyKind('comment')} title="Comment (C)"><MessageSquarePlus size={15} /><Kbd>C</Kbd></button>
-          <button type="button" className="annotate-rail-btn del" onClick={() => applyKind('delete')} title="Suggest deletion (D)"><Strikethrough size={15} /><Kbd>D</Kbd></button>
-          <button type="button" className="annotate-rail-btn ins" onClick={() => applyKind('insert')} title="Add addition (I)"><Plus size={15} /><Kbd>I</Kbd></button>
+        <div className="annotate-rail" style={{ left: pending.left, top: pending.top }} role="toolbar" aria-label="Inline critique tools" onMouseDown={event => event.preventDefault()}>
+          <button type="button" className="annotate-rail-btn hl" aria-label="Highlight selected text" onClick={() => applyKind('highlight')} title="Highlight (H)"><Highlighter size={18} /><span>Highlight</span></button>
+          <button type="button" className="annotate-rail-btn cm" aria-label="Comment on selected text" onClick={() => applyKind('comment')} title="Comment (C)"><MessageSquarePlus size={18} /><span>Comment</span></button>
+          <button type="button" className="annotate-rail-btn del" aria-label="Suggest deletion" onClick={() => applyKind('delete')} title="Suggest deletion (D)"><Strikethrough size={18} /><span>Cut</span></button>
+          <button type="button" className="annotate-rail-btn ins" aria-label="Suggest addition" onClick={() => applyKind('insert')} title="Add addition (I)"><Plus size={18} /><span>Add</span></button>
           <button type="button" className="annotate-rail-close" onClick={clear} aria-label="Cancel"><X size={13} /></button>
         </div>
       )}
@@ -489,6 +509,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
           <div className="annotate-editor-label"><MessageSquarePlus size={13} /> Comment on “{pending.quote.length > 40 ? pending.quote.slice(0, 40) + '…' : pending.quote}”</div>
           <textarea ref={editorRef} aria-label="Comment text" value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder="Share a thought on this passage…" />
           <div className="annotate-editor-actions">
+            <Button size="sm" variant="outline" onClick={clear}>Cancel</Button>
             <span className="fine-print"><CornerDownLeft size={12} /> <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd> save · <Kbd>Esc</Kbd> cancel</span>
             <Button size="sm" className="primary-button" disabled={!draft.trim()} onClick={commitComment}>Add comment</Button>
           </div>
@@ -503,6 +524,8 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
 const MIN_REVIEW_WORDS = 175;
 
 export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: { work: Work; data: Snapshot; act: Act; busy: boolean; back: () => void; onSignIn: () => void; onAuthor: (id: string) => void }) {
+  const [readingFocus, setReadingFocus] = useState(false);
+  const critiqueRef = useRef<HTMLElement>(null);
   const [form, setForm] = useState({ overall: '', strengths: '', suggestions: '',processDisclosure:'human-only' as 'human-only'|'assistive-tools',attested:false }), [report, setReport] = useState(false), [reason, setReason] = useState(''), [feedbackTab, setFeedbackTab] = useState('Write a critique');
   const [history, setHistory] = useState(() => annotationHistory<WorkAnnotation>());
   const localAnnotations = history.present;
@@ -512,6 +535,8 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
   const done = w.hasReviewed || data.reviews.some(r => r.workId === w.id && r.userId === uid && r.version === w.version);
   const reviews = data.reviews.filter(r => r.workId === w.id);
   const canAnnotate = !!uid && !own && !done;
+  const reservation = useCritiqueReservation(w.id, canAnnotate, data.revision);
+  const [critiqueStorageAvailable,setCritiqueStorageAvailable]=useState(true);
   const key = 'opendraft:temporary-critique:' + w.id + ':' + (uid || 'guest') + ':' + w.version;
 
   // Restore this writer's temporary browser draft after hydration or a work change.
@@ -524,10 +549,11 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
     void fetch('/api/workshop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'view', workId: w.id }) }).catch(() => { /* ignore */ });
   }, [uid, own, w.id]);
 
-  const update = (name: string, value:string|boolean) => setForm(f => { const n = { ...f, [name]: value }; try { sessionStorage.setItem(key, JSON.stringify({ ...n, annotations: localAnnotations })); } catch { /* ignore */ } return n; });
+  const update = (name: string, value:string|boolean) => { if(['overall','strengths','suggestions'].includes(name))reservation.markActive(); const next={...form,[name]:value};setForm(next);try { sessionStorage.setItem(key, JSON.stringify({ ...next, annotations: localAnnotations }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); } };
   const changeHistory = (change: (current: AnnotationHistory<WorkAnnotation>) => AnnotationHistory<WorkAnnotation>) => {
+    reservation.markActive();
     const next = change(history); setHistory(next);
-    try { sessionStorage.setItem(key, JSON.stringify({ ...form, annotations: next.present })); } catch { /* ignore */ }
+    try { sessionStorage.setItem(key, JSON.stringify({ ...form, annotations: next.present }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); }
   };
   const totalWords = wordCount(form.overall + ' ' + form.strengths + ' ' + form.suggestions + ' ' + localAnnotations.map(a => a.body).join(' '));
   const valid = totalWords > 0&&form.attested;
@@ -535,7 +561,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
   const baseCredit = inRoom ? 1 : 0.5;
   const perWord = inRoom ? 0.005 : 0.0025;
   const reward = totalWords < MIN_REVIEW_WORDS ? 0 : Math.round((baseCredit + (totalWords - MIN_REVIEW_WORDS) * perWord) * 1000) / 1000;
-  const submit = async () => { const payload = { ...form, workId: w.id, annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, reward ? `Critique shared. You earned ${formatCredits(reward)} credits.` : 'Critique shared. Thank you for helping this writer. No credits earned for this shorter critique.')) { sessionStorage.removeItem(key); setForm({ overall: '', strengths: '', suggestions: '',processDisclosure:'human-only',attested:false }); setHistory(annotationHistory()); setFeedbackTab('All feedback'); } };
+  const submit = async () => { const payload = { ...form, workId: w.id, annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, reward ? `Critique shared. You earned ${formatCredits(reward)} credits.` : 'Critique shared. Thank you for helping this writer. No credits earned for this shorter critique.')) { try{sessionStorage.removeItem(key);}catch{/* The server submission succeeded even if tab storage is unavailable. */} setForm({ overall: '', strengths: '', suggestions: '',processDisclosure:'human-only',attested:false }); setHistory(annotationHistory()); setFeedbackTab('All feedback'); } };
   const saved = data.bookmarks.includes(w.id);
 
   const serverAnnotations: WorkAnnotation[] = (data.annotations || []).filter(a => a.workId === w.id).map(a => ({ ...a, start: a.startPos ?? a.start, end: a.endPos ?? a.end }));
@@ -547,7 +573,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
   const removeAnnotation = (id: string) => changeHistory(current => editAnnotations(current, current.present.filter(a => a.id !== id)));
 
   return (
-    <div className="reader">
+    <div className={'reader' + (readingFocus ? ' reading-focus' : '')}>
       <div className="breadcrumb">
         <button onClick={() => onAuthor(w.authorId)}>{w.author}</button>
         <span>›</span>
@@ -556,6 +582,9 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
         <strong>{w.title}</strong>
       </div>
       <h1 className="write-title">Write a critique</h1>
+      <div className="reading-tools"><ReadingSettings/><button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button><button type="button" className="reading-settings-button" onClick={() => { critiqueRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'instant' : 'smooth', block: 'start' }); critiqueRef.current?.focus({ preventScroll: true }); }}><MessageSquare size={16}/>Jump to feedback</button></div>
+      {canAnnotate && <CritiqueReservation reservation={reservation} workId={w.id}/>}
+      {canAnnotate && !critiqueStorageAvailable && <p className="form-error" role="alert">Tab storage is unavailable. Keep this page open or copy your feedback elsewhere until you submit it; it cannot be recovered after a reload.</p>}
       <div className="reader-grid">
         <div>
           <article className="reader-manuscript">
@@ -586,7 +615,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
             </div>
           </article>
 
-          <section className="panel-card" style={{ marginTop: 16 }}>
+          <section ref={critiqueRef} tabIndex={-1} className="panel-card critique-composer-panel" style={{ marginTop: 16 }} aria-label="Your critique">
             <div className="critique-panel-heading"><Sparkles size={16} /><h2>Your critique</h2><span className="reward-badge">{formatCredits(reward)} credits</span></div>
             <p className="critique-intro">Use the line tools above, then add as much or as little prose as you like. Structured feedback is optional.</p>
             <Tabs value={feedbackTab} onValueChange={setFeedbackTab}>
@@ -683,6 +712,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
 
 export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics, onAnalytics,onChanged }: { work: Work; data: Snapshot; act: Act; busy: boolean; onCritique: () => void; onAuthor: (id: string) => void; analytics: Analytics | null; onAnalytics: () => void;onChanged?:()=>void }) {
   const [expanded, setExpanded] = useState(false);
+  const [readingFocus, setReadingFocus] = useState(false);
   const reviews = data.reviews.filter(r => r.workId === w.id);
   const annotations = (data.annotations || []).filter(a => a.workId === w.id);
   const uid = data.user?.id;
@@ -697,7 +727,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
   const preview = paragraphs.slice(0, 2).join('\n\n');
   const body = expanded ? w.content : preview;
   return (
-    <div className="sheet wide story-sheet">
+    <div className={'sheet wide story-sheet' + (readingFocus ? ' reading-focus' : '')}>
       <div className="sheet-toolbar story-toolbar">
         <span className="breadcrumb" style={{ padding: 0 }}>
           <button onClick={onCritique}>Writing</button><span>›</span><strong>{w.title}</strong>
@@ -728,6 +758,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
             {(w.warning || w.mature || w.themes) && <div className="mature-note"><AlertTriangle size={13} /><strong>Content note:</strong> {[w.warning, w.themes].filter(Boolean).join(' · ')}</div>}
 
             <h2 className="section-title" style={{ marginTop: 20 }}>Read</h2>
+            <div className="reading-tools"><ReadingSettings/><button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button></div>
             <div className="reader-text story-read">{body.split('\n\n').map((p, i) => <p key={i}>{formatInline(p)}</p>)}</div>
             {!expanded && paragraphs.length > 2 && (
               <button className="continue-reading" onClick={() => setExpanded(true)}>Continue reading ({w.words.toLocaleString()} words) <ChevronDown size={14} /></button>
@@ -773,7 +804,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
             <div className="panel-card">
               <div className="panel-head">Want to help?</div>
               <div className="panel-body">
-                <p className="fine-print" style={{ marginBottom: 10 }}>Read closely, leave line notes, and tell the writer what you noticed. Critiques are private between you and the writer.</p>
+                <p className="fine-print" style={{ marginBottom: 10 }}>Read closely, leave line notes, and tell the writer what you noticed. {w.critiqueVisibility === 'private' ? 'Critiques are private between you and the writer.' : 'Critiques are visible to workshop members.'}</p>
                 <Button variant="outline" onClick={onCritique}>Write a critique <ChevronRight size={13} /></Button>
               </div>
             </div>
@@ -1012,30 +1043,34 @@ function NewMessageDialog({ open, onOpenChange, onSend, busy }: { open: boolean;
 
 /* ------------------------------------------------------------- Circles */
 
-export function Circles({ data, act, busy,initialSelected='' }: { data: Snapshot; act: Act; busy: boolean;initialSelected?:string }) {
-  const [selected, setSelected] = useState(initialSelected), [body, setBody] = useState(''), [create, setCreate] = useState(false), [form, setForm] = useState({ name: '', description: '', genre: 'Literary fiction' });
+export function Circles({ data, act, busy,initialSelected='',onOpenStory,onVisit }: { data: Snapshot; act: Act; busy: boolean;initialSelected?:string;onOpenStory:(id:string)=>void;onVisit:(id:string)=>void }) {
+  const selected=initialSelected;
+  const [body, setBody] = useState(''), [create, setCreate] = useState(false), [form, setForm] = useState({ name: '', description: '', genre: 'Literary fiction' });
   const [bulletin,setBulletin]=useState('');
   const circles=usePagedList<Circle>('/api/workshop?collection=circles',!selected,data.revision);
   const discussion=usePagedList<Snapshot['posts'][number]>('/api/workshop?collection=posts&id='+encodeURIComponent(selected),!!selected,data.revision);
   const [detail,setDetail]=useState<Circle|null>(null);
-  useEffect(()=>{if(!selected)return;const controller=new AbortController();fetch('/api/workshop?collection=circle&id='+encodeURIComponent(selected),{signal:controller.signal}).then(async response=>{if(!response.ok)throw new Error();const result=await response.json() as {circle:Circle};setDetail(result.circle);}).catch(()=>{});return()=>controller.abort();},[selected,data.revision]);
+  const [circleError,setCircleError]=useState('');
+  useEffect(()=>{if(!selected)return;const controller=new AbortController();fetch('/api/workshop?collection=circle&id='+encodeURIComponent(selected),{signal:controller.signal}).then(async response=>{const result=await response.json() as {circle:Circle;error?:string};if(!response.ok)throw new Error(result.error||'This circle is unavailable.');setDetail(result.circle);setCircleError('');}).catch(error=>{if(!controller.signal.aborted)setCircleError(error.message);});return()=>controller.abort();},[selected,data.revision]);
   const circle = detail?.id===selected?detail:circles.items.find(c=>c.id===selected)||data.circles.find(c=>c.id===selected);
   const posts = discussion.items;
   if (circle) return (
     <div className="circle-room">
-      <button className="text-link" onClick={() => setSelected('')} style={{ marginBottom: 12 }}><ArrowLeft size={14} />All writing circles</button>
+      <button className="text-link" onClick={() => onVisit('')} style={{ marginBottom: 12 }}><ArrowLeft size={14} />All writing circles</button>
       <div className="circle-room-heading">
         <span className="circle-symbol tone-1">{circle.name[0]}</span>
         <div><h2>{circle.name}</h2><p>{circle.description}</p><small>{circle.members} {circle.members === 1 ? 'member' : 'members'} · {circle.genre}</small></div>
         <Button variant={circle.joined ? 'outline' : 'default'} disabled={busy||circle.ownerId===data.user?.id} onClick={() => void act({ action: 'join', circleId: circle.id, joined: !circle.joined }, circle.joined ? 'You left the circle.' : 'Welcome to the circle.')}>{circle.ownerId===data.user?.id?'Circle owner':circle.joined ? 'Leave circle' : 'Join circle'}</Button>
       </div>
+      <CircleWorkshop circle={circle} uid={data.user?.id || ''} act={act} busy={busy} revision={data.revision} onOpenStory={onOpenStory}/>
       <div className="discussion-heading"><h3>Around the table</h3><span>Talk craft, trade ideas, get unstuck.</span></div>
-      {circle.ownerId===data.user?.id&&<form className="discussion-form bulletin-form" onSubmit={async event=>{event.preventDefault();if(await act({action:'bulletin',circleId:circle.id,body:bulletin},'Bulletin delivered to your circle members.'))setBulletin('');}}><label className="field-label">Send a circle bulletin<Textarea value={bulletin} onChange={event=>setBulletin(event.target.value)} minLength={5} maxLength={4000} required placeholder="An announcement for every current member’s inbox…" /></label><Button type="submit" className="primary-button" disabled={busy||bulletin.trim().length<5}><Send size={14} />Send to all members</Button></form>}
+      {circle.ownerId===data.user?.id&&<details className="workshop-bulletin"><summary>Send an inbox bulletin to your circle</summary><form className="discussion-form bulletin-form" onSubmit={async event=>{event.preventDefault();if(await act({action:'bulletin',circleId:circle.id,body:bulletin},'Bulletin delivered to your circle members.'))setBulletin('');}}><label className="field-label">Send a circle bulletin<Textarea value={bulletin} onChange={event=>setBulletin(event.target.value)} minLength={5} maxLength={4000} required placeholder="An announcement for every current member’s inbox…" /></label><Button type="submit" className="primary-button" disabled={busy||bulletin.trim().length<5}><Send size={14} />Send to all members</Button></form></details>}
       {circle.joined ? <form className="discussion-form" onSubmit={async e => { e.preventDefault(); if (await act({ action: 'post', circleId: circle.id, body }, 'Your note is on the table.')) setBody(''); }}><label className="field-label">Start a conversation<Textarea required minLength={5} maxLength={5000} value={body} onChange={e => setBody(e.target.value)} placeholder="What are you working on? What’s keeping you up at the writing desk?" /></label><Button type="submit" disabled={busy || body.trim().length < 5} className="primary-button">Post to the circle</Button></form> : <div className="notice-box">Join this circle to take part in the conversation.</div>}
       {posts.length ? posts.map(p => <article className="discussion-post" key={p.id}><div className="feedback-author"><WriterAvatar name={p.author} userId={p.userId} className="avatar tone-0" /><strong>{p.author}</strong><small>{new Date(p.createdAt).toLocaleDateString()}</small></div><p>{p.body}</p></article>) : <div style={{ marginTop: 12 }}><Empty title="Pull up a chair." description="Be the first to start a conversation in this circle." /></div>}
       <PageMore page={discussion} label="Earlier circle notes" />
     </div>
   );
+  if(selected)return <div className="notice-box" role={circleError?'alert':'status'}>{circleError||'Loading your circle…'}<Button variant="outline" onClick={()=>onVisit('')}>All writing circles</Button></div>;
   return (
     <>
       <div className="circle-toolbar"><span>Find your writing circle</span><Button variant="outline" onClick={() => setCreate(true)}><Plus size={14} />Start a circle</Button></div>
@@ -1045,7 +1080,7 @@ export function Circles({ data, act, busy,initialSelected='' }: { data: Snapshot
             <span className={'circle-symbol tone-' + (i % 3)}>{c.name[0]}</span>
             <span className="genre-tag" style={{ position: 'absolute', top: 16, right: 16 }}>{c.genre}</span>
             <h2>{c.name}</h2><p>{c.description}</p>
-            <div className="circle-card-bottom"><span><Users size={14} />{c.members} {c.members === 1 ? 'member' : 'members'}</span><Button variant="outline" onClick={() => setSelected(c.id)}>{c.joined ? <><Check size={14} />Your circle</> : 'Visit circle'}</Button></div>
+            <div className="circle-card-bottom"><span><Users size={14} />{c.members} {c.members === 1 ? 'member' : 'members'}</span><Button variant="outline" onClick={() => onVisit(c.id)}>{c.joined ? <><Check size={14} />Your circle</> : 'Visit circle'}</Button></div>
           </article>
         ))}
       </div>
@@ -1078,7 +1113,7 @@ export function Guide({ onExplore, onWrite, onAbout }: { onExplore: () => void; 
       </div>
       <div className="guide-inline">
         <h2 className="section-title">Critique inline</h2>
-        <p className="fine-print">While you read, select any passage to leave a line note. Highlights mark what catches your eye, comments attach a thought in the margin, deletions strike text you would cut, and additions show the words you would place in green. Press <Kbd>H</Kbd> <Kbd>C</Kbd> <Kbd>D</Kbd> <Kbd>I</Kbd>, or just click in the text to add an addition.</p>
+        <p className="fine-print">While you read, select any passage to leave a line note. On a phone, long-press and adjust the selection handles, then use the line tools. Comments appear as chips directly after the passage. Highlights mark what catches your eye, deletions strike text you would cut, and additions show the words you would place in green. On desktop, press <Kbd>H</Kbd> <Kbd>C</Kbd> <Kbd>D</Kbd> <Kbd>I</Kbd>, or click in the text to add words.</p>
       </div>
       <div className="guide-principles">
         <h2>A few things we believe in.</h2>

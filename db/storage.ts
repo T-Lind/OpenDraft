@@ -3,6 +3,7 @@ import {Pool, type PoolClient} from 'pg';
 type Row=Record<string,unknown>;
 type Result={results:Row[];meta:{changes:number}};
 const numericColumns=new Set(['deleted_at','session_valid_after','terms_accepted_at','ai_assessed_at','email_verified_at','expires_at','last_used_at','usefulness','specificity','actionability','queue_position','avatar_updated_at','avatar_scan_at','updated_at','created_at','resolved_at','words','reviews','members','credits','version','reward','amount','helpful','views','age','first_viewed_at','last_viewed_at','start_pos','end_pos','para','current_streak','longest_streak','read_at','flagged']);
+['meeting_at','feedback_due_at','started_at','holds','available'].forEach(column=>numericColumns.add(column));
 function normalize(row:Row):Row{return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,numericColumns.has(k)&&typeof v==='string'?Number(v):v]));}
 function mapped(r:{rows:Row[];rowCount:number|null}):Result{return{results:r.rows.map(normalize),meta:{changes:r.rowCount||0}};}
 const poolCache=globalThis as typeof globalThis&{__opendraftPgPools?:Map<string,Pool>};

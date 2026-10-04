@@ -12,6 +12,24 @@ showcase choices remain human.
 
 ## What works
 
+- Phone-first five-destination navigation (Home, Read, Write, Inbox, More), labeled
+  touch-sized critique tools, keyboard-aware comment positioning, and accessible
+  dialog/navigation focus. Inline comments are text-only chips immediately after
+  their highlighted passage, not right-hand cards.
+- Browser-persistent reading preferences: serif/sans manuscript fonts, 18/21/24px
+  type, spacing and line-length controls, focus reading, higher contrast, link
+  underlines, reduced motion, and optional single-key shortcuts. Device reduced
+  motion is always respected. Preferences sync across tabs, not across devices.
+- Owner-managed circle workshop prompts, agendas, meeting times, feedback deadlines,
+  shareable circle links, and member-curated published-work reading lists. Circles
+  remain open to signed-in members; this is not private-circle or unpublished-draft sharing.
+- Optional server-enforced critique reservations: a 30-minute hold, extension
+  during active writing up to a 90-minute total, one hold per reviewer, and explicit
+  release. Reading alone does not claim or renew a hold. Requested slots held by
+  someone else cannot be consumed by an unreserved submission; expiry never deletes
+  the browser critique draft. Additional feedback is still welcome after a work
+  has received its requested critiques, at the normal outside-reading-room rate.
+
 - Four rotating spotlight places per genre with a FIFO queue. Two critiques release a
   place; published work remains available for further feedback.
 - Five starting credits, one credit for a 175-word spotlight critique and 0.005
@@ -149,10 +167,10 @@ See [Google's SafeSearch documentation](https://docs.cloud.google.com/vision/doc
 
 While composing a line comment, its passage stays blue. Escape cancels the draft;
 Add comment saves it in the temporary critique. Share your critique stores it in
-PostgreSQL. Saved and temporary line notes remain visible in a right-hand margin,
-aligned with their paragraph; on narrow screens they flow directly below that
-paragraph. Click a note or marked passage to synchronize focus. Remove an unsent
-note from its card. Undo/Redo (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, or Ctrl+Y)
+PostgreSQL. Saved and temporary comments remain visible as text-only inline chips
+immediately after their highlighted passage; manuscript text continues after them.
+Click a chip or marked passage to focus it. Double-click an unsent note, or select
+it and press Delete, to remove it. Undo/Redo (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, or Ctrl+Y)
 cover annotation changes. Text fields keep their normal undo behavior. Unsent
 notes and critique text recover from session storage per writer, work, and version.
 
@@ -327,7 +345,8 @@ where you run it.
 The exchange remains free, with human feedback and writer ownership. See
 [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
 and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). GitHub issue, pull-request, and CI
-templates are included; database CI needs a `TEST_DATABASE_URL` repository secret.
+templates are included. Integration and real-browser CI use disposable PostgreSQL
+service containers; no production database secret is required.
 
 Draft autosave and recovery, split messaging, moderation history, reviewer ratings,
 friendships, revision comparison, daily showcase, ownership policies, and account

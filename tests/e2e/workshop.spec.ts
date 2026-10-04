@@ -110,6 +110,8 @@ test('a line comment appears as an inline chip and the manuscript continues afte
   await page.locator('.work-title').filter({ hasText: 'The last light in the house' }).click();
   await page.locator('.story-cta .primary-button').click();
   await expect(page.getByRole('heading', { name: 'Write a critique' })).toBeVisible();
+  await page.getByRole('button', { name: 'Start critique · hold a spot' }).click();
+  await expect(page.getByText('Your critique spot is held', { exact: true })).toBeVisible();
 
   const firstParagraph = page.locator('.reader-manuscript .reader-text p').first();
   await firstParagraph.evaluate(element => {
@@ -144,7 +146,7 @@ test('a line comment appears as an inline chip and the manuscript continues afte
 
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileWidths = await page.evaluate(() => {
-    const navigation = document.querySelector<HTMLElement>('.sidebar');
+    const navigation = document.querySelector<HTMLElement>('.mobile-nav');
     return {
       viewport: document.documentElement.clientWidth,
       document: document.documentElement.scrollWidth,
@@ -156,5 +158,68 @@ test('a line comment appears as an inline chip and the manuscript continues afte
   expect(mobileWidths.document).toBeLessThanOrEqual(mobileWidths.viewport);
   expect(mobileWidths.body).toBeLessThanOrEqual(mobileWidths.viewport);
   expect(mobileWidths.navigation).toBeLessThanOrEqual(mobileWidths.navigationViewport);
+  await page.getByRole('button', { name: 'Release spot', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Start critique · hold a spot' })).toBeVisible();
+  await expect(chip).toHaveText('This opening image lands.');
+  expect(failures).toEqual([]);
+});
+
+test('phone navigation, reading preferences, and circle workshops work end to end', async ({ page }, testInfo) => {
+  const failures = captureBrowserFailures(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await registerWriter(page, `ci-mobile-${Date.now()}-${testInfo.retry}@example.test`, 'CI Mobile Writer');
+  await expect(page.locator('.mobile-nav > button')).toHaveCount(5);
+  await expect(page.locator('.sidebar')).not.toBeVisible();
+  await page.locator('.topbar-actions').getByRole('button', { name: 'Reading and accessibility settings' }).click();
+  await page.getByLabel('Manuscript font').selectOption('sans');
+  await page.getByLabel('Reading text size').selectOption('extra-large');
+  await page.getByLabel('Text spacing').selectOption('wide');
+  await page.getByLabel('Line length').selectOption('narrow');
+  await page.getByLabel('Higher contrast').check();
+  await page.getByLabel('Reduce motion').check();
+  await page.getByLabel('Underline text links').check();
+  await page.getByLabel('Appearance').selectOption('dark');
+  await expect(page.locator('.reading-preview')).toHaveCSS('font-size', '24px');
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-reading-size', 'extra-large');
+  await expect(page.locator('html')).toHaveAttribute('data-reading-spacing', 'wide');
+  await expect(page.locator('html')).toHaveAttribute('data-contrast', 'true');
+  await expect(page.locator('html')).toHaveAttribute('data-reduce-motion', 'true');
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  await page.locator('.mobile-nav').getByRole('button', { name: 'More destinations' }).click();
+  await page.getByRole('button', { name: 'Your groups', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a circle' }).click();
+  const circleName = `A CI Mobile Table ${Date.now()}`;
+  await page.getByLabel('Circle name').fill(circleName);
+  await page.getByLabel('What brings you together?').fill('An isolated browser-test workshop for close reading and revision.');
+  await page.getByRole('button', { name: 'Create your circle' }).click();
+  await page.locator('.circle-card').filter({ hasText: circleName }).getByRole('button', { name: 'Your circle' }).click();
+  await page.getByRole('button', { name: 'Edit workshop brief' }).click();
+  await page.getByLabel('Current workshop prompt').fill('Look closely at opening images and changes in narrative distance.');
+  await page.getByLabel('Session agenda').fill('Check in, discuss the opening, then share a revision plan.');
+  await page.getByLabel('Workshop meeting', { exact: true }).fill('2026-10-10T18:00');
+  await page.getByLabel('Feedback due by').fill('2026-10-09T18:00');
+  await page.getByLabel('Meeting place or call details').fill('Campus writing table');
+  await page.getByRole('button', { name: 'Save workshop brief' }).click();
+  await expect(page.getByText('Look closely at opening images and changes in narrative distance.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Add a reading' }).click();
+  await page.getByLabel('Find published writing').fill('The last light');
+  await expect(page.getByLabel('Choose a reading').locator('option[value="the-last-light"]')).toHaveCount(1);
+  await page.getByLabel('Choose a reading').selectOption('the-last-light');
+  await page.getByRole('button', { name: 'Add to reading list' }).click();
+  await expect(page.locator('.workshop-reading').filter({ hasText: 'The last light in the house' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('Campus writing table', { exact: true })).toBeVisible();
+  await expect(page.locator('.workshop-reading')).toHaveCount(1);
+  for (const width of [360, 390, 430, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Read & critique', exact: true }).click();
+  await expect(page.locator('.story-read')).toHaveCSS('font-size', '24px');
+  await page.locator('.mobile-nav').getByRole('button', { name: 'Write', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Your writing' })).toBeVisible();
   expect(failures).toEqual([]);
 });

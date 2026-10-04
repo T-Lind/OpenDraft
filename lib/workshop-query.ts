@@ -1,5 +1,6 @@
 import type { Database } from '@/db/storage';
 import { cursorFor, limitFor, pageOf, readCursor } from './pagination';
+import { reservationStatus } from './critique-reservations';
 
 export type Row = Record<string, unknown>;
 export const camel = (row: Row): Row => Object.fromEntries(Object.entries(row).map(([key,value])=>[key.replace(/_([a-z])/g,(_,letter)=>letter.toUpperCase()),value]));
@@ -26,6 +27,7 @@ export async function queryCollection(db: Database, uid: string, params: URLSear
  const after=cursor?' AND (created_at,id)<(?,?)':'';
  const afterValues=cursor?[cursor.value,cursor.id]:[];
  let rows:Row[];
+ if(collection==='critiqueReservation') return reservationStatus(db,uid,id);
  if(collection==='work') {
   const work=await db.prepare(`SELECT ${workColumns},w.content,${workExtras} FROM works w WHERE w.id=? AND (${publicWork} OR w.author_id=?)`).bind(uid,uid,id,uid).first();
   if(!work) throw Object.assign(new Error('This work is unavailable.'),{status:404});
@@ -71,6 +73,9 @@ export async function queryCollection(db: Database, uid: string, params: URLSear
   if(!circle)throw Object.assign(new Error('This circle is unavailable.'),{status:404});return {circle:camel(circle)};
  } else if(collection==='posts') {
   rows=(await db.prepare(`SELECT * FROM posts WHERE circle_id=?${after} ORDER BY created_at DESC,id DESC LIMIT ?`).bind(id,...afterValues,limit+1).all()).results;
+ } else if(collection==='circleReadings') {
+  if(!await db.prepare('SELECT id FROM memberships WHERE user_id=? AND circle_id=?').bind(uid,id).first())throw Object.assign(new Error('Join this circle to see its workshop reading list.'),{status:403});
+  rows=(await db.prepare(`SELECT cr.id,cr.work_id,cr.added_by,cr.created_at,w.title,w.author,w.genre,w.words FROM circle_readings cr JOIN works w ON w.id=cr.work_id WHERE cr.circle_id=? AND ${publicWork}${cursor?' AND (cr.created_at,cr.id)<(?,?)':''} ORDER BY cr.created_at DESC,cr.id DESC LIMIT ?`).bind(id,...afterValues,limit+1).all()).results;
  } else if(collection==='events') {
   rows=(await db.prepare(`SELECT * FROM credit_events WHERE user_id=?${after} ORDER BY created_at DESC,id DESC LIMIT ?`).bind(uid,...afterValues,limit+1).all()).results;
  } else if(collection==='conversations') {
