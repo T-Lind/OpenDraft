@@ -12,7 +12,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Kbd } from '@/components/ui/kbd';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, CommandSeparator } from '@/components/ui/command';
 import { sampleWorks, sampleCircles, genres, formatCredits, readingTimeLabel, streakLabel, Work, Review, Circle, WorkAnnotation, WorkMessage, Analytics, SearchResults, AdminOverview } from './data';
@@ -101,6 +101,7 @@ export default function Workshop() {
   const [friendRequests,setFriendRequests]=useState(0);
   const [adminRequests,setAdminRequests]=useState({cases:0,legal:0});
   const gPending = useRef(false);
+  const moreOrigin = useRef('Dashboard');
 
   const load = useCallback(async () => {
     setLoadError('');
@@ -516,12 +517,12 @@ export default function Workshop() {
         </main>
       </div>
 
+      <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
       <nav className="mobile-nav" aria-label="Mobile workshop navigation">
         {[{ label: 'Home', view: 'Dashboard', icon: LayoutGrid, active: view === 'Dashboard' }, { label: 'Read', view: 'Explore', icon: BookOpen, active: ['Explore', 'Story', 'Read & critique'].includes(view) }, { label: 'Write', view: 'My writing', icon: FileText, active: ['My writing', 'Editor'].includes(view) }, { label: 'Inbox', view: 'Messages', icon: MessageSquare, active: view === 'Messages' }].map(({ label, view: destination, icon: Icon, active }) => <button key={label} type="button" className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} onClick={() => go(destination)}><span className="mobile-nav-icon"><Icon size={21}/>{destination === 'Messages' && unreadMessages > 0 && <span className="nav-badge" aria-label={`${unreadMessages} unread messages`}>{unreadMessages > 99 ? '99+' : unreadMessages}</span>}</span><span>{label}</span></button>)}
-        <button type="button" aria-label="More destinations" aria-haspopup="dialog" aria-expanded={moreOpen} className={!['Dashboard', 'Explore', 'Story', 'Read & critique', 'My writing', 'Editor', 'Messages'].includes(view) ? 'active' : ''} onClick={() => setMoreOpen(true)}><MoreHorizontal size={21}/><span>More</span></button>
+        <DialogTrigger asChild><button type="button" aria-label="More destinations" className={!['Dashboard', 'Explore', 'Story', 'Read & critique', 'My writing', 'Editor', 'Messages'].includes(view) ? 'active' : ''} onClick={() => { moreOrigin.current = view; }}><MoreHorizontal size={21}/><span>More</span></button></DialogTrigger>
       </nav>
-      <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
-        <DialogContent className="compact-dialog mobile-more-dialog">
+        <DialogContent className="compact-dialog mobile-more-dialog" onCloseAutoFocus={event => { if (moreOrigin.current !== view) { event.preventDefault(); document.getElementById('main-content')?.focus({ preventScroll: true }); } }}>
           <DialogTitle>Your workshop</DialogTitle><DialogDescription>Circles, saved reading, account settings, and help.</DialogDescription>
           <nav className="more-destinations" aria-label="More workshop destinations">
             {[primaryNav[4], primaryNav[2], secondaryNav[2], secondaryNav[1], primaryNav[5], secondaryNav[3], secondaryNav[4], ...(data.isAdmin ? [{ icon: ShieldCheck, label: 'Admin dashboard', view: 'Admin' }] : [])].map(({ icon: Icon, label, view: destination }) => <button key={destination} type="button" onClick={() => go(destination)}><Icon size={20}/><span>{label}</span>{destination === 'Friends' && friendRequests > 0 && <span className="nav-badge">{friendRequests}</span>}<ChevronRight size={16}/></button>)}

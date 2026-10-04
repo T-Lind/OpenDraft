@@ -137,6 +137,9 @@ test('a line comment appears as an inline chip and the manuscript continues afte
   const chip = firstParagraph.locator('.annotation-chip');
   await expect(chip).toBeVisible();
   await expect(chip).toHaveText('This opening image lands.');
+  await page.reload();
+  await expect(chip).toHaveText('This opening image lands.');
+  await expect(page.getByText('Your critique spot is held', { exact: true })).toBeVisible();
   expect(await page.locator('.annotation-margin, .annotation-margin-card').count()).toBe(0);
   expect(await chip.evaluate(element => ({
     livesInsideParagraph: element.parentElement?.matches('p[data-para="0"]') ?? false,
@@ -181,12 +184,16 @@ test('phone navigation, reading preferences, and circle workshops work end to en
   await page.getByLabel('Appearance').selectOption('dark');
   await expect(page.locator('.reading-preview')).toHaveCSS('font-size', '24px');
   await page.keyboard.press('Escape');
+  await expect(page.locator('.topbar-actions').getByRole('button', { name: 'Reading and accessibility settings' })).toBeFocused();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-reading-size', 'extra-large');
   await expect(page.locator('html')).toHaveAttribute('data-reading-spacing', 'wide');
   await expect(page.locator('html')).toHaveAttribute('data-contrast', 'true');
   await expect(page.locator('html')).toHaveAttribute('data-reduce-motion', 'true');
   await expect(page.locator('html')).toHaveClass(/dark/);
+  await page.locator('.mobile-nav').getByRole('button', { name: 'More destinations' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.mobile-nav').getByRole('button', { name: 'More destinations' })).toBeFocused();
   await page.locator('.mobile-nav').getByRole('button', { name: 'More destinations' }).click();
   await page.getByRole('button', { name: 'Your groups', exact: true }).click();
   await page.getByRole('button', { name: 'Start a circle' }).click();
@@ -212,6 +219,10 @@ test('phone navigation, reading preferences, and circle workshops work end to en
   await page.reload();
   await expect(page.getByText('Campus writing table', { exact: true })).toBeVisible();
   await expect(page.locator('.workshop-reading')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Edit workshop brief' }).click();
+  await expect(page.getByLabel('Workshop meeting', { exact: true })).toHaveValue('2026-10-10T18:00');
+  await expect(page.getByLabel('Feedback due by')).toHaveValue('2026-10-09T18:00');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   for (const width of [360, 390, 430, 768]) {
     await page.setViewportSize({ width, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);

@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { Settings2, RotateCcw } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogTrigger } from './ui/dialog';
 
 type Preferences = {
   font: 'serif' | 'sans';
@@ -75,9 +75,8 @@ export function ReadingSettings({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const { preferences: p, update, storageAvailable } = useReadingPreferences();
   const { resolvedTheme, setTheme } = useTheme();
-  return <>
-    <button type="button" className={compact ? 'topbar-chip reading-settings-trigger' : 'reading-settings-button'} aria-label="Reading and accessibility settings" title="Reading and accessibility settings" onClick={() => setOpen(true)}><Settings2 size={16} />{!compact && <span>Reading settings</span>}</button>
-    <Dialog open={open} onOpenChange={setOpen}>
+  return <Dialog open={open} onOpenChange={setOpen}>
+    <DialogTrigger asChild><button type="button" className={compact ? 'topbar-chip reading-settings-trigger' : 'reading-settings-button'} aria-label="Reading and accessibility settings" title="Reading and accessibility settings"><Settings2 size={16} />{!compact && <span>Reading settings</span>}</button></DialogTrigger>
       <DialogContent className="compact-dialog preferences-dialog">
         <DialogTitle>Make yourself comfortable.</DialogTitle>
         <DialogDescription>Reading and accessibility preferences apply throughout OpenDraft. Saved on this browser, not shared with other members.</DialogDescription>
@@ -97,11 +96,10 @@ export function ReadingSettings({ compact = false }: { compact?: boolean }) {
           </fieldset>
           <div className="reading-preview reader-text" aria-label="Reading preview"><p>A little space to read closely. A sentence that leaves room for your next thought.</p></div>
           <p className="fine-print" role="status">{storageAvailable ? 'Changes save automatically on this browser.' : 'Browser storage is unavailable. These preferences will last only until you close or reload this page.'}</p>
-          <Button type="button" variant="outline" onClick={() => update(defaults)}><RotateCcw size={14}/>Reset reading &amp; accessibility preferences</Button>
         </div>
+        <div className="preferences-footer"><Button type="button" variant="outline" onClick={() => update(defaults)}><RotateCcw size={14}/>Reset preferences</Button><Button type="button" className="primary-button" onClick={() => setOpen(false)}>Done</Button></div>
       </DialogContent>
-    </Dialog>
-  </>;
+    </Dialog>;
 }
 
 export function prefersReducedMotion() {

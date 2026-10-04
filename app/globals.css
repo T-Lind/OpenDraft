@@ -2413,8 +2413,11 @@ html[data-reading-measure="narrow"] { --reading-measure: 52ch; }
 .reading-focus .critique-panel { display: none; }
 .reading-focus .reader-manuscript { max-width: 900px; margin-inline: auto; }
 .critique-composer-panel { scroll-margin-top: 64px; }
-.preferences-dialog { max-width: 560px !important; }
-.preferences-fields { display: grid; gap: 16px; }
+.preferences-dialog { max-width: 560px !important; display: flex; flex-direction: column; overflow: hidden; }
+.preferences-dialog > [data-slot="dialog-title"], .preferences-dialog > [data-slot="dialog-description"] { flex-shrink: 0; padding-right: 30px; }
+.preferences-dialog > [data-slot="dialog-close"] { min-width: 40px; min-height: 40px; display: grid; place-items: center; }
+.preferences-fields { display: grid; gap: 16px; min-height: 0; overflow-y: auto; padding: 4px; overscroll-behavior: contain; }
+.preferences-footer { display: flex; justify-content: space-between; gap: 10px; padding-top: 12px; border-top: 1px solid var(--rule); flex-shrink: 0; }
 .preferences-fields fieldset { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 14px; border: 1px solid var(--rule); border-radius: 6px; }
 .preferences-fields legend { padding: 0 6px; color: var(--ink); font-weight: 700; }
 .preferences-fields select { width: 100%; }

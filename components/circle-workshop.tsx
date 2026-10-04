@@ -20,11 +20,14 @@ function WorkshopBriefEditor({ circle, act, busy, close }: { circle: Circle; act
   const [error, setError] = useState('');
   return <form className="workshop-brief-form" onSubmit={async event => {
     event.preventDefault(); setError('');
-    if (await act({ action: 'updateWorkshop', circleId: circle.id, ...form, meetingAt: form.meetingAt ? new Date(form.meetingAt).getTime() : 0, feedbackDueAt: form.feedbackDueAt ? new Date(form.feedbackDueAt).getTime() : 0 }, 'Workshop brief saved.', setError)) close();
+    // Let the browser manage segmented date entry; read the final native values at submit.
+    const fields=new FormData(event.currentTarget);
+    const meeting=String(fields.get('meetingAt')||''),due=String(fields.get('feedbackDueAt')||'');
+    if (await act({ action: 'updateWorkshop', circleId: circle.id, ...form, meetingAt: meeting ? new Date(meeting).getTime() : 0, feedbackDueAt: due ? new Date(due).getTime() : 0 }, 'Workshop brief saved.', setError)) close();
   }}>
     <label className="field-label">Current workshop prompt<Textarea maxLength={1200} rows={4} placeholder="What are we exploring in this workshop? What should readers pay attention to?" value={form.workshopPrompt} onChange={event => setForm({ ...form, workshopPrompt: event.target.value })}/></label>
     <label className="field-label">Session agenda<Textarea maxLength={2000} rows={4} placeholder="For example: 10-minute check-in, two close reads, then revision plans." value={form.workshopAgenda} onChange={event => setForm({ ...form, workshopAgenda: event.target.value })}/></label>
-    <div className="form-grid"><label className="field-label">Workshop meeting<Input type="datetime-local" max="2099-12-31T23:59" value={form.meetingAt} onChange={event => setForm({ ...form, meetingAt: event.target.value })}/></label><label className="field-label">Feedback due by<Input type="datetime-local" max="2099-12-31T23:59" value={form.feedbackDueAt} onChange={event => setForm({ ...form, feedbackDueAt: event.target.value })}/></label></div>
+    <div className="form-grid"><label className="field-label">Workshop meeting<Input name="meetingAt" type="datetime-local" max="2099-12-31T23:59" defaultValue={form.meetingAt}/></label><label className="field-label">Feedback due by<Input name="feedbackDueAt" type="datetime-local" max="2099-12-31T23:59" defaultValue={form.feedbackDueAt}/></label></div>
     <p className="fine-print">Enter times in your local time zone ({Intl.DateTimeFormat().resolvedOptions().timeZone}). Each member sees the time in their own zone. Clear a date to remove it.</p>
     <label className="field-label">Meeting place or call details<Input maxLength={240} placeholder="Room, meeting link, or where to find the call details" value={form.meetingPlace} onChange={event => setForm({ ...form, meetingPlace: event.target.value })}/></label>
     <p className="fine-print">Circles are open to signed-in workshop members. Do not put private addresses, meeting passwords, or confidential writing in the brief.</p>
