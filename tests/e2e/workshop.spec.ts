@@ -173,6 +173,14 @@ test('phone navigation, reading preferences, and circle workshops work end to en
   await registerWriter(page, `ci-mobile-${Date.now()}-${testInfo.retry}@example.test`, 'CI Mobile Writer');
   await expect(page.locator('.mobile-nav > button')).toHaveCount(5);
   await expect(page.locator('.sidebar')).not.toBeVisible();
+  await expect(page.locator('.site-footer').getByRole('link', { name: 'Source code', exact: true })).toHaveAttribute('href', 'https://github.com/T-Lind/OpenDraft');
+  for (const width of [360, 390, 430, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    const footer = page.locator('.site-footer');
+    expect(await footer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('.topbar-actions').getByRole('button', { name: 'Reading and accessibility settings' }).click();
   for (const width of [360, 390]) {
     await page.setViewportSize({ width, height: 844 });

@@ -1391,11 +1391,14 @@ input, textarea, select {
   padding: 18px 24px 4px;
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
   font-size: 11px;
   color: var(--ink-muted);
 }
 .site-footer button { border: 0; background: none; color: var(--link); font-size: 11px; }
+.site-footer > * { min-width: 0; overflow-wrap: anywhere; }
 
 /* ---------------------------------------------------------- Dashboard ---- */
 
@@ -2502,6 +2505,10 @@ html[data-reduce-motion="true"] *, html[data-reduce-motion="true"] *::before, ht
   .topbar-actions { margin-left: auto; }
   .topbar-chip { padding-inline: 6px; }
   .feedback-fab { display: none; }
+  .site-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; padding: 18px 12px 4px; }
+  .site-footer > span { grid-column: 1 / -1; margin-bottom: 6px; }
+  .site-footer a, .site-footer button { display: flex; align-items: center; min-height: 44px; max-width: 100%; text-align: left; }
+  .site-footer button { grid-column: 1 / -1; }
   .toast { bottom: calc(var(--mobile-nav-height) + 12px); width: calc(100vw - 24px); font-size: 13px; }
   .reading-tools { gap: 6px; }
   .reading-settings-button { flex: 1 1 auto; justify-content: center; min-height: 44px; }

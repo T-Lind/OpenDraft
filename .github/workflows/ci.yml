@@ -15,6 +15,7 @@ concurrency:
 
 env:
   NODE_VERSION: 24
+  SOURCE_REPOSITORY_URL: https://github.com/T-Lind/OpenDraft
 
 jobs:
   code-quality:
