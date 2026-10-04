@@ -27,7 +27,7 @@ try{
  const migration=journal.entries.map(({tag})=>readFileSync(`drizzle/${tag}.sql`,'utf8').replaceAll('REFERENCES "public".',`REFERENCES "${testSchema}".`)).join('\n');
  const c=await pool.connect();try{await c.query('BEGIN');await c.query(`SET LOCAL search_path TO "${testSchema}"`);await c.query(migration);await c.query('COMMIT');}finally{c.release();}
  mkdirSync('.sites-runtime/tests',{recursive:true});
- await build({entryPoints:{route:'app/api/workshop/route.ts',search:'app/api/search/route.ts',avatar:'app/api/avatar/route.ts',notifications:'app/api/notifications/route.ts',export:'app/api/export/route.ts',admin:'app/api/admin/route.ts',author:'app/api/author/route.ts',rate:'lib/rate-limit.ts',storage:'db/storage.ts',community:'app/api/community/route.ts',contact:'app/api/contact/route.ts',diff:'lib/revision-diff.ts',password:'app/api/auth/password/route.ts',verifyEmail:'app/api/auth/verify/route.ts'},outdir:'.sites-runtime/tests',outExtension:{'.js':'.mjs'},bundle:true,format:'esm',platform:'node',packages:'external',plugins:[{name:'integration-adapters',setup(b){b.onResolve({filter:/^(cloudflare:workers|@neondatabase\/serverless|@\/app\/chatgpt-auth|@\/lib\/auth)$/},args=>({path:args.path,namespace:'test-adapter'}));b.onLoad({filter:/.*/,namespace:'test-adapter'},args=>({contents:args.path==='cloudflare:workers'?'export const env=globalThis.__opendraftTest.env;':args.path==='@neondatabase/serverless'?'export const neon=()=>globalThis.__opendraftTest.driver;':args.path==='@/lib/auth'?"export async function getSessionUser(){const u=globalThis.__opendraftTest.identity.getStore();return u?{id:u.userId,email:u.email,name:u.displayName,issuedAt:u.issuedAt}:null;} export function readEnv(k){return process.env[k];} export function googleConfigured(){return true;} export async function destroySession(){} export async function createSession(user){globalThis.__opendraftTest.session=user;}":'export async function getChatGPTUser(){return null;}',loader:'js'}));b.onResolve({filter:/^@\//},args=>({path:resolve(args.path.slice(2)+'.ts')}));}}]});
+ await build({entryPoints:{route:'app/api/workshop/route.ts',search:'app/api/search/route.ts',avatar:'app/api/avatar/route.ts',notifications:'app/api/notifications/route.ts',export:'app/api/export/route.ts',admin:'app/api/admin/route.ts',author:'app/api/author/route.ts',rate:'lib/rate-limit.ts',storage:'db/storage.ts',community:'app/api/community/route.ts',contentCheck:'app/api/content-check/route.ts',contact:'app/api/contact/route.ts',diff:'lib/revision-diff.ts',password:'app/api/auth/password/route.ts',verifyEmail:'app/api/auth/verify/route.ts'},outdir:'.sites-runtime/tests',outExtension:{'.js':'.mjs'},bundle:true,format:'esm',platform:'node',packages:'external',plugins:[{name:'integration-adapters',setup(b){b.onResolve({filter:/^(cloudflare:workers|@neondatabase\/serverless|@\/app\/chatgpt-auth|@\/lib\/auth)$/},args=>({path:args.path,namespace:'test-adapter'}));b.onLoad({filter:/.*/,namespace:'test-adapter'},args=>({contents:args.path==='cloudflare:workers'?'export const env=globalThis.__opendraftTest.env;':args.path==='@neondatabase/serverless'?'export const neon=()=>globalThis.__opendraftTest.driver;':args.path==='@/lib/auth'?"export async function getSessionUser(){const u=globalThis.__opendraftTest.identity.getStore();return u?{id:u.userId,email:u.email,name:u.displayName,issuedAt:u.issuedAt}:null;} export function readEnv(k){return process.env[k];} export function googleConfigured(){return true;} export async function destroySession(){} export async function createSession(user){globalThis.__opendraftTest.session=user;}":'export async function getChatGPTUser(){return null;}',loader:'js'}));b.onResolve({filter:/^@\//},args=>({path:resolve(args.path.slice(2)+'.ts')}));}}]});
  const api=await import('../.sites-runtime/tests/route.mjs');
  const search=await import('../.sites-runtime/tests/search.mjs');
  const avatar=await import('../.sites-runtime/tests/avatar.mjs');
@@ -237,6 +237,86 @@ try{
  const community=await import('../.sites-runtime/tests/community.mjs'),contact=await import('../.sites-runtime/tests/contact.mjs');
  const cRead=async(uid,params)=>identity.run(uid?user(uid):null,async()=>{const response=await community.GET(new Request('https://opendraft.test/api/community?'+new URLSearchParams(params)));return{status:response.status,data:await response.json()};});
  const cAction=async(uid,body)=>identity.run(uid?user(uid):null,async()=>{const response=await community.POST(new Request('https://opendraft.test/api/community',{method:'POST',headers:{Origin:'https://opendraft.test','Content-Type':'application/json'},body:JSON.stringify(body)}));return{status:response.status,data:await response.json()};});
+ // Optional account defaults are private, explicitly saved, and conflict-safe.
+ const prefs={font:'sans',size:'large',spacing:'wide',measure:'narrow',contrast:true,reduceMotion:true,underlineLinks:true,keyboardShortcuts:false,appearance:'dark'};
+ ok((await cRead(null,{section:'readingPreferences'})).status===401,'account defaults require authentication');
+ ok((await cRead('alice',{section:'readingPreferences'})).data.preferences===null,'account defaults start unset');
+ const savedPrefs=await cAction('alice',{action:'readingPreferences',preferences:prefs,expectedUpdatedAt:0});
+ ok(savedPrefs.status===200&&savedPrefs.data.preferences.appearance==='dark','account appearance and reading defaults save');
+ ok((await cRead('bob',{section:'readingPreferences',id:'alice'})).data.preferences===null,'account settings cannot be requested for someone else');
+ ok((await cAction('alice',{action:'readingPreferences',preferences:{...prefs,extra:'not accepted'},expectedUpdatedAt:savedPrefs.data.updatedAt})).status===400,'settings reject arbitrary extra fields');
+ ok((await cAction('alice',{action:'readingPreferences',preferences:prefs,expectedUpdatedAt:0})).status===409,'stale settings save cannot overwrite another device');
+ const prefsRace=await Promise.all([cAction('alice',{action:'readingPreferences',preferences:{...prefs,size:'extra-large'},expectedUpdatedAt:savedPrefs.data.updatedAt}),cAction('alice',{action:'readingPreferences',preferences:{...prefs,size:'standard'},expectedUpdatedAt:savedPrefs.data.updatedAt})]);
+ ok(prefsRace.filter(x=>x.status===200).length===1&&prefsRace.filter(x=>x.status===409).length===1,'concurrent settings saves have exactly one winner');
+ const currentPrefs=(await cRead('alice',{section:'readingPreferences'})).data;
+ ok((await cAction('alice',{action:'readingPreferences',preferences:null,expectedUpdatedAt:savedPrefs.data.updatedAt})).status===409,'stale removal preserves newer account settings');
+ ok((await cAction('alice',{action:'readingPreferences',preferences:null,expectedUpdatedAt:currentPrefs.updatedAt})).status===200,'explicit account-copy removal works');
+ // Approval-only access is enforced in detail, lists, snapshots, and paged posts.
+ ok((await action('alice',{action:'createCircle',circle:{name:'Approval integration table',description:'A workshop for testing membership approvals and private discussion.',genre:'Literary fiction',access:'approval'}})).status===200,'owner creates an approval-only circle');
+ const privateCircle=(await query("SELECT id FROM circles WHERE name='Approval integration table'")).rows[0].id;
+ await action('alice',{action:'updateWorkshop',circleId:privateCircle,workshopPrompt:'Members-only prompt secret',workshopAgenda:'Members-only agenda',meetingPlace:'Private meeting details',meetingAt:1790000000000,feedbackDueAt:1790000001000});
+ await action('alice',{action:'post',circleId:privateCircle,body:'Members-only discussion secret'});
+ const circleRead=async(uid,params)=>identity.run(user(uid),async()=>{const response=await api.GET(new Request('https://opendraft.test/api/workshop?'+new URLSearchParams(params)));return{status:response.status,data:await response.json()};});
+ const hidden=(await circleRead('bob',{collection:'circle',id:privateCircle})).data.circle;
+ ok(hidden.name==='Approval integration table'&&hidden.workshopPrompt===''&&hidden.meetingPlace===''&&hidden.meetingAt===0&&!hidden.joined,'nonmember sees directory information but not brief or meeting');
+ ok((await circleRead('bob',{collection:'posts',id:privateCircle})).data.items.length===0,'private posts never reach nonmembers');
+ const nonmemberSnapshot=(await read('bob')).data;
+ ok(!JSON.stringify(nonmemberSnapshot).includes('Members-only prompt secret')&&!JSON.stringify(nonmemberSnapshot).includes('Members-only discussion secret'),'snapshot does not leak approval-only context');
+ ok(!(await circleRead('bob',{collection:'circles'})).data.items.some(x=>x.workshopPrompt==='Members-only prompt secret'),'circle list does not leak brief');
+ ok((await action('bob',{action:'join',circleId:privateCircle,joined:true})).status===200,'join requests membership instead of autojoining');
+ ok(!(await query('SELECT id FROM memberships WHERE circle_id=$1 AND user_id=$2',[privateCircle,'bob'])).rows.length,'pending member has no membership');
+ ok((await circleRead('bob',{collection:'circle',id:privateCircle})).data.circle.requested===true,'pending status is visible only for current viewer');
+ ok((await action('bob',{action:'post',circleId:privateCircle,body:'Not approved yet'})).status===403,'pending member cannot post');
+ ok((await circleRead('bob',{collection:'circleRequests',id:privateCircle})).status===403,'only owner can list membership requests');
+ ok((await action('bob',{action:'circleRequest',circleId:privateCircle,userId:'bob',approve:true})).status===409,'requester cannot approve self');
+ ok((await action('alice',{action:'circleRequest',circleId:privateCircle,userId:'bob',approve:true})).status===200,'owner approves pending membership');
+ ok((await circleRead('bob',{collection:'circle',id:privateCircle})).data.circle.workshopPrompt==='Members-only prompt secret'&&(await circleRead('bob',{collection:'posts',id:privateCircle})).data.items.length===1,'approved member receives brief and discussion');
+ ok((await action('alice',{action:'removeCircleMember',circleId:privateCircle,userId:'alice'})).status===403,'owner cannot remove themselves');
+ ok((await action('alice',{action:'removeCircleMember',circleId:privateCircle,userId:'bob'})).status===200,'owner removes current member');
+ ok((await circleRead('bob',{collection:'posts',id:privateCircle})).data.items.length===0,'removed member loses discussion access');
+ await action('bob',{action:'join',circleId:privateCircle,joined:true});
+ ok((await action('bob',{action:'join',circleId:privateCircle,joined:false})).status===200&&(await circleRead('alice',{collection:'circleRequests',id:privateCircle})).data.items.length===0,'member cancels pending request');
+ await action('bob',{action:'join',circleId:privateCircle,joined:true});
+ ok((await action('alice',{action:'circleRequest',circleId:privateCircle,userId:'bob',approve:false})).status===200,'owner declines request');
+ ok((await action('alice',{action:'circleAccess',circleId:privateCircle,access:'open'})).status===409,'opening requires explicit exposure confirmation');
+ ok((await action('alice',{action:'circleAccess',circleId:privateCircle,access:'open',confirmOpening:true})).status===200,'owner confirms opening');
+ ok((await circleRead('bob',{collection:'posts',id:privateCircle})).data.items.length===1,'confirmed open discussion is visible');
+ await action('bob',{action:'join',circleId:privateCircle,joined:true});
+ ok((await circleRead('bob',{collection:'circle',id:privateCircle})).data.circle.joined===true,'open circle joins immediately');
+ // Operator triage uses unresolved reports, not speculative guilt or private text.
+ await query("UPDATE profiles SET credits=credits+5 WHERE id='alice'");
+ ok((await action('alice',{action:'publish',work:work('triage-evidence')})).status===200,'account triage has its own published-work fixture');
+ const evidenceWork='triage-evidence';
+ await action('bob',{action:'report',workId:evidenceWork,reason:'Recent isolated report for account triage.'});
+ const accounts=(await adminRead('alice',{collection:'accountSignals'})).data;
+ const account=accounts.items.find(item=>item.id==='alice');
+ ok(account?.workReports>=1&&account.reporters>=1&&!('email' in account),'triage shows explainable signals without private profile details');
+ ok((await adminRead('bob',{collection:'accountSignals'})).status===403,'account triage is administrator-only');
+ const evidence=(await adminRead('alice',{collection:'accountEvidence',id:'alice'})).data;
+ ok(evidence.items.some(item=>item.workId===evidenceWork&&item.reason.includes('triage'))&&evidence.items.every(item=>!('content' in item)&&!('body' in item)),'triage evidence references actual reports, not private manuscript or inbox scanning');
+ const contentCheck=await import('../.sites-runtime/tests/contentCheck.mjs');
+ const checkThemes=async(uid,body,origin='https://opendraft.test')=>identity.run(uid?user(uid):null,async()=>{const response=await contentCheck.POST(new Request('https://opendraft.test/api/content-check',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)}));return{status:response.status,data:await response.json()};});
+ const gatewayKey=process.env.AI_GATEWAY_API_KEY;let modelCalls=0,providerBody;
+ try {
+  process.env.AI_GATEWAY_API_KEY='integration-only-not-a-real-key';
+  globalThis.fetch=async(url,options)=>{assert.equal(url,'https://ai-gateway.vercel.sh/v1/evaluate');modelCalls++;providerBody=JSON.parse(options.body);return Response.json({answers:Object.fromEntries(Array.from({length:8},(_,i)=>['theme'+i,{score:i===0?1.8:i===6?1.2:0}]))});};
+  ok((await checkThemes(null,{content:'Synthetic draft',consent:true})).status===401,'theme checks require authentication');
+  ok((await checkThemes('alice',{content:'Synthetic draft',consent:false})).status===400&&modelCalls===0,'theme check without consent never contacts a model');
+  ok((await checkThemes('alice',{content:'Synthetic draft',consent:true},'https://evil.test')).status===403&&modelCalls===0,'theme checks reject cross-origin requests');
+  const checked=await checkThemes('alice',{content:'Synthetic draft',consent:true});
+  ok(checked.status===200&&checked.data.suggestions.some(s=>s.theme==='Violence'&&!s.uncertain)&&checked.data.suggestions.some(s=>s.theme==='Trauma'&&s.uncertain),'fixed model rubrics yield advisory labels and uncertainty');
+  ok(Object.keys(providerBody.state).join(',')==='manuscript'&&providerBody.state.manuscript==='Synthetic draft'&&providerBody.providerOptions.gateway.disallowPromptTraining===true,'only consented draft text is sent with no-training routing');
+  ok(!('authorId' in providerBody)&&!('name' in providerBody)&&!('email' in providerBody),'model request has no account profile information');
+  globalThis.fetch=async()=>Response.json({answers:{theme0:{score:99}}});
+  ok((await checkThemes('alice',{content:'Synthetic draft',consent:true})).status===503,'invalid model answers do not produce labels');
+  globalThis.fetch=async()=>new Response('Provider unavailable',{status:503});
+  ok((await checkThemes('alice',{content:'Synthetic draft',consent:true})).status===503,'provider outage leaves manual publishing available');
+  delete process.env.AI_GATEWAY_API_KEY;
+  const oidc=process.env.VERCEL_OIDC_TOKEN;delete process.env.VERCEL_OIDC_TOKEN;
+  try {ok((await checkThemes('alice',{content:'Synthetic draft',consent:true})).status===503,'missing gateway credentials fails safely');} finally {if(oidc!==undefined)process.env.VERCEL_OIDC_TOKEN=oidc;}
+  ok((await checkThemes('alice',{content:'Synthetic draft',consent:true})).status===503,'fifth permitted check can fail without mutating draft');
+  ok((await checkThemes('alice',{content:'Synthetic draft',consent:true})).status===429,'per-member theme-check daily limit is enforced');
+ } finally {globalThis.fetch=originalFetch;if(gatewayKey===undefined)delete process.env.AI_GATEWAY_API_KEY;else process.env.AI_GATEWAY_API_KEY=gatewayKey;}
  for(const uid of ['friend-a','friend-b','friend-c','revision-writer','rating-reviewer','deleted-member'])await read(uid);
  await query("UPDATE profiles SET terms_version='' WHERE id='friend-c'");
  ok((await cAction('friend-c',{action:'friendRequest',id:'friend-a'})).status===428,'terms acceptance is required before sharing');

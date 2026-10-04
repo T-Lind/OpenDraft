@@ -23,7 +23,8 @@ import { Onboarding } from './onboarding';
 import { WriterAvatar } from '@/components/writer-avatar';
 import { usePagedList,PageMore } from '@/components/paged-list';
 import {AuthDialog} from '@/components/auth-dialog';
-import { ReadingSettings, useReadingPreferences, prefersReducedMotion } from '@/components/reading-preferences';
+import { ReadingSettings, ReadingAccountBridge, useReadingPreferences, prefersReducedMotion } from '@/components/reading-preferences';
+import { AccountReview } from '@/components/account-review';
 
 export type Snapshot = {
   user: { id: string; name: string; bio: string; credits: number; avatarUpdatedAt?: number; termsVersion?:string; friendsOnly?:boolean; onboardingCompleted?: boolean; age?: number | null; sex?: string; location?: string; interests?: string; currentStreak?: number; longestStreak?: number } | null;
@@ -290,6 +291,7 @@ export default function Workshop() {
 
   return (
     <div className="app-shell">
+      <ReadingAccountBridge id={data.user.id}/>
       <a href="#main-content" className="skip-link">Skip to content</a>
 
       <header className="app-topbar">
@@ -694,7 +696,7 @@ function Histogram({ data, order }: { data: Record<string, number>; order: strin
   );
 }
 
-function AdminView({ onOpenStory,requestCounts }: { requestCounts:{cases:number;legal:number};onOpenStory: (id: string) => void; onAuthor: (id: string) => void }) {
+function AdminView({ onOpenStory,onAuthor,requestCounts }: { requestCounts:{cases:number;legal:number};onOpenStory: (id: string) => void; onAuthor: (id: string) => void }) {
   const [reportFilter,setReportFilter]=useState('open'),[feedbackFilter,setFeedbackFilter]=useState('open');
   const reportsPage=usePagedList<AdminOverview['reports'][number]>('/api/admin?collection=reports&status='+reportFilter);
   const feedbackPage=usePagedList<AdminOverview['feedback'][number]>('/api/admin?collection=feedback&status='+feedbackFilter);
@@ -756,6 +758,7 @@ function AdminView({ onOpenStory,requestCounts }: { requestCounts:{cases:number;
           ) : <p className="fine-print">No works in the reading room or queue yet.</p>}
         </section>
 
+        <AccountReview onRead={onOpenStory} onAuthor={onAuthor}/>
         <section className="dash-section">
           <h2 className="section-title">Bug reports &amp; feature requests <span className="tab-count">{feedback.length}</span></h2>
           <label className="admin-filter">Show feedback<select className="form-select" value={feedbackFilter} onChange={event=>setFeedbackFilter(event.target.value)}><option value="open">Open</option><option value="resolved">Resolved</option><option value="archived">Archived</option><option value="all">All statuses</option></select></label>

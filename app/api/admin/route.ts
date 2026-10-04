@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { readCursor,limitFor,pageOf } from '@/lib/pagination';
 import { rateLimit } from '@/lib/rate-limit';
 import { promoteSQL } from '@/lib/reading-room';
+import { accountReview } from '@/lib/account-review';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +73,7 @@ export async function GET(request?:Request) {
     if (!admin) return json({ error: 'Administrator access is required.' }, 403);
     const params=request?new URL(request.url).searchParams:null;
     if(params?.has('collection')){
+      if(['accountSignals','accountEvidence'].includes(params.get('collection')||''))return json(await accountReview(db,params));
       const cursor=readCursor(params.get('cursor')),limit=limitFor(params);
       const listings:Record<string,string>={reports:'SELECT r.*,w.title AS work_title,w.author AS work_author FROM reports r LEFT JOIN works w ON w.id=r.work_id',feedback:'SELECT * FROM feedback',works:"SELECT w.id,w.title,w.author,w.status,w.words,w.created_at,(SELECT COUNT(*) FROM reviews r WHERE r.work_id=w.id)::int AS reviews FROM works w WHERE w.status<>'draft'",flaggedMessages:'SELECT id,sender,recipient,body,flagged,created_at FROM messages WHERE flagged>0'};
       listings.audit='SELECT a.*,p.name AS admin_name FROM admin_actions a JOIN profiles p ON p.id=a.admin_id';

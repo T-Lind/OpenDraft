@@ -10,6 +10,7 @@ import { savePrivateDraft,revisionVersion } from '@/lib/draft-save';
 import { promoteSQL } from '@/lib/reading-room';
 import {emailPasswordConfigured} from '@/lib/password-auth';
 import { changeReservation, availableCritiqueSlot } from '@/lib/critique-reservations';
+import { circleProjection, changeCircleMembership, manageCircle } from '@/lib/circle-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,8 +98,8 @@ async function snapshot(db: Database, uid: string) {
     db.prepare(`SELECT ${workColumns},''::text AS content,${workExtras} FROM works w WHERE w.id IN (SELECT id FROM works WHERE author_id=? ORDER BY created_at DESC,id DESC LIMIT 20) OR w.id IN (SELECT id FROM works WHERE status NOT IN ('draft','withdrawn') ORDER BY CASE status WHEN 'spotlight' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END,created_at DESC,id DESC LIMIT 20) ORDER BY w.created_at DESC,w.id DESC`).bind(uid,uid,uid),
     db.prepare("SELECT r.*,w.title AS work_title FROM reviews r JOIN works w ON w.id=r.work_id WHERE w.author_id=? OR ((w.status NOT IN ('draft','withdrawn') OR (w.author_id='' AND r.user_id=?)) AND (r.user_id=? OR w.critique_visibility='public')) ORDER BY r.created_at DESC,r.id DESC LIMIT 20").bind(uid, uid, uid),
     db.prepare('SELECT work_id FROM bookmarks WHERE user_id=? ORDER BY id DESC LIMIT 50').bind(uid),
-    db.prepare('SELECT c.*, (SELECT COUNT(*) FROM memberships m WHERE m.circle_id=c.id) AS members, EXISTS(SELECT 1 FROM memberships m WHERE m.circle_id=c.id AND m.user_id=?) AS joined FROM circles c ORDER BY c.name,c.id LIMIT 20').bind(uid),
-    db.prepare('SELECT * FROM posts ORDER BY created_at DESC,id DESC LIMIT 20'),
+    db.prepare(`WITH viewer AS (SELECT ?::text AS uid) SELECT ${circleProjection} FROM circles c ORDER BY c.name,c.id LIMIT 20`).bind(uid),
+    db.prepare("SELECT * FROM posts WHERE EXISTS(SELECT 1 FROM circles c WHERE c.id=posts.circle_id AND (c.access='open' OR EXISTS(SELECT 1 FROM memberships m WHERE m.circle_id=c.id AND m.user_id=?))) ORDER BY created_at DESC,id DESC LIMIT 20").bind(uid),
     db.prepare('SELECT * FROM credit_events WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 20').bind(uid),
     db.prepare("SELECT a.* FROM annotations a JOIN works w ON w.id=a.work_id WHERE w.author_id=? OR (w.status NOT IN ('draft','withdrawn') AND (a.user_id=? OR w.critique_visibility='public')) ORDER BY a.created_at DESC,a.id DESC LIMIT 50").bind(uid, uid),
     db.prepare("SELECT COALESCE(SUM(v.views),0) AS total_reads, COUNT(DISTINCT v.user_id) AS unique_readers FROM work_views v JOIN works w ON w.id=v.work_id WHERE w.author_id=? AND w.status<>'withdrawn'").bind(uid),
@@ -198,7 +199,7 @@ export async function POST(request: Request) {
     const raw = await request.text();
     if (raw.length > 410000) return json({ error: 'This submission is too large.' }, 413);
     const b = JSON.parse(raw);
-    if(!b||!['uploadAvatar','removeAvatar','saveDraft','autosaveDraft','publish','review','annotationResponse','bookmark','view','withdraw','join','createCircle','post','bulletin','profile','completeOnboarding','helpful','sendMessage','readMessage','report','feedback','updateWorkshop','addCircleReading','removeCircleReading','reserveCritique','renewCritique','releaseCritique'].includes(b.action))bad('Unknown workshop action.');
+    if(!b||!['uploadAvatar','removeAvatar','saveDraft','autosaveDraft','publish','review','annotationResponse','bookmark','view','withdraw','join','createCircle','post','bulletin','profile','completeOnboarding','helpful','sendMessage','readMessage','report','feedback','updateWorkshop','addCircleReading','removeCircleReading','reserveCritique','renewCritique','releaseCritique','circleAccess','circleRequest','removeCircleMember'].includes(b.action))bad('Unknown workshop action.');
     if (b.action !== 'uploadAvatar' && raw.length > 200000) return json({ error: 'This submission is too large.' }, 413);
     const db = database();
     const user = await identity(db,b.action !== 'autosaveDraft');
@@ -212,7 +213,7 @@ export async function POST(request: Request) {
     if (!p) bad('Please sign in again.', 401);
     if (!['view', 'bookmark', 'readMessage'].includes(b.action)) await touchStreak(db, uid, now);
 
-    if(['publish','review','createCircle','post','bulletin','sendMessage','updateWorkshop','addCircleReading','reserveCritique'].includes(b.action))requireTerms(p!);
+    if(['publish','review','createCircle','join','post','bulletin','sendMessage','updateWorkshop','addCircleReading','reserveCritique','circleAccess','circleRequest','removeCircleMember'].includes(b.action))requireTerms(p!);
     let actionNotice = '';
     if (['reserveCritique','renewCritique','releaseCritique'].includes(b.action)) {
       const workId=z.string().min(1).max(100).parse(b.workId);
@@ -300,13 +301,13 @@ export async function POST(request: Request) {
       if (!result[0].meta.changes) bad('Work not found.', 404);
     } else if (b.action === 'join') {
       const id = z.string().max(100).parse(b.circleId);
-      if (!await db.prepare('SELECT id FROM circles WHERE id=?').bind(id).first()) bad('Circle not found.', 404);
-      if (b.joined) await db.prepare('INSERT INTO memberships(id,user_id,circle_id) VALUES(?,?,?) ON CONFLICT DO NOTHING').bind(crypto.randomUUID(), uid, id).run();
-      else {if(await db.prepare('SELECT id FROM circles WHERE id=? AND owner_id=?').bind(id,uid).first())bad('The circle owner must remain a member.',409);await db.prepare('DELETE FROM memberships WHERE user_id=? AND circle_id=?').bind(uid, id).run();}
+      await changeCircleMembership(db,uid,id,z.boolean().parse(b.joined),now);
+    } else if (['circleAccess','circleRequest','removeCircleMember'].includes(b.action)) {
+      await manageCircle(db,uid,b,now);
     } else if (b.action === 'createCircle') {
-      const c = z.object({ name: z.string().trim().min(3).max(80), description: z.string().trim().min(15).max(600), genre: z.enum(genres.slice(1) as [string, ...string[]]) }).parse(b.circle);
+      const c = z.object({ name: z.string().trim().min(3).max(80), description: z.string().trim().min(15).max(600), genre: z.enum(genres.slice(1) as [string, ...string[]]),access:z.enum(['open','approval']).default('open') }).parse(b.circle);
       const id = crypto.randomUUID();
-      await db.batch([db.prepare('INSERT INTO circles(id,name,description,genre,owner_id) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING').bind(id, c.name, c.description, c.genre, uid), db.prepare('INSERT INTO memberships(id,user_id,circle_id) VALUES(?,?,?) ON CONFLICT DO NOTHING').bind(crypto.randomUUID(), uid, id)]);
+      await db.batch([db.prepare('INSERT INTO circles(id,name,description,genre,owner_id,access) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING').bind(id, c.name, c.description, c.genre, uid,c.access), db.prepare('INSERT INTO memberships(id,user_id,circle_id) VALUES(?,?,?) ON CONFLICT DO NOTHING').bind(crypto.randomUUID(), uid, id)]);
     } else if (b.action === 'updateWorkshop') {
       const input=z.object({circleId:z.string().min(1).max(100),workshopPrompt:z.string().trim().max(1200),workshopAgenda:z.string().trim().max(2000),meetingPlace:z.string().trim().max(240),meetingAt:z.number().int().min(0).max(4102444800000),feedbackDueAt:z.number().int().min(0).max(4102444800000)}).parse(b);
       const result=await db.prepare('UPDATE circles SET workshop_prompt=?,workshop_agenda=?,meeting_place=?,meeting_at=?,feedback_due_at=? WHERE id=? AND owner_id=?').bind(input.workshopPrompt,input.workshopAgenda,input.meetingPlace,input.meetingAt,input.feedbackDueAt,input.circleId,uid).run();
@@ -322,7 +323,8 @@ export async function POST(request: Request) {
     } else if (b.action === 'post') {
       const id = z.string().max(100).parse(b.circleId), body = z.string().trim().min(5).max(5000).parse(b.body);
       if (!await db.prepare('SELECT id FROM memberships WHERE user_id=? AND circle_id=?').bind(uid, id).first()) bad('Join this circle before posting.', 403);
-      await db.prepare('INSERT INTO posts(id,circle_id,user_id,author,body,created_at) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(), id, uid, p.name, body, now).run();
+      const posted=await db.batch([db.prepare('INSERT INTO posts(id,circle_id,user_id,author,body,created_at) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM memberships WHERE user_id=? AND circle_id=?)').bind(crypto.randomUUID(), id, uid, p.name, body, now,uid,id)]);
+      if(!posted[0].meta.changes)bad('Join this circle before posting.',403);
     } else if (b.action === 'bulletin') {
       const circleId=z.string().max(100).parse(b.circleId),body=z.string().trim().min(5).max(4000).parse(b.body);
       const circle=await db.prepare('SELECT name FROM circles WHERE id=? AND owner_id=?').bind(circleId,uid).first<{name:string}>();

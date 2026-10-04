@@ -204,6 +204,8 @@ test('phone navigation, reading preferences, and circle workshops work end to en
   await page.getByLabel('Reduce motion').check();
   await page.getByLabel('Underline text links').check();
   await page.getByLabel('Appearance').selectOption('dark');
+  await page.getByRole('button', { name:'Save settings to account',exact:true }).click();
+  await expect(page.getByRole('button', { name:'Remove account copy',exact:true })).toBeVisible();
   await expect(page.locator('.reading-preview')).toHaveCSS('font-size', '24px');
   await page.keyboard.press('Escape');
   await expect(page.locator('.topbar-actions').getByRole('button', { name: 'Reading and accessibility settings' })).toBeFocused();
@@ -255,4 +257,80 @@ test('phone navigation, reading preferences, and circle workshops work end to en
   await page.locator('.mobile-nav').getByRole('button', { name: 'Write', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your writing' })).toBeVisible();
   expect(failures).toEqual([]);
+});
+
+test('approval-only circles protect context until the owner approves, and account defaults load in a fresh browser', async ({page,browser},testInfo)=>{
+  await registerWriter(page,`ci-owner-${Date.now()}-${testInfo.project.name}@example.test`,'CI Circle Owner');
+  await page.locator('.topbar-actions').getByRole('button',{name:'Reading and accessibility settings'}).click();
+  await page.getByLabel('Manuscript font').selectOption('sans');
+  await page.getByLabel('Appearance').selectOption('dark');
+  await page.getByRole('button',{name:'Save settings to account',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Remove account copy',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Done',exact:true}).click();
+  const device={baseURL:'http://localhost:5173',viewport:page.viewportSize(),isMobile:!!testInfo.project.use.isMobile,hasTouch:!!testInfo.project.use.hasTouch};
+  const fresh=await browser.newContext({...device,storageState:{cookies:await page.context().cookies(),origins:[]}});
+  const freshPage=await fresh.newPage();
+  try {
+    await freshPage.goto('/');
+    await expect(freshPage.locator('html')).toHaveClass(/dark/);
+    await expect(freshPage.locator('html')).toHaveAttribute('data-reading-font','sans');
+    await freshPage.goto('/#Writing%20circles');
+    // Navigation is hash-driven; create through the real workshop interface.
+    await freshPage.getByRole('button',{name:'Start a circle'}).click();
+    const name=`CI Approval Table ${Date.now()}`;
+    await freshPage.getByLabel('Circle name').fill(name);
+    await freshPage.getByLabel('What brings you together?').fill('A members-only workshop for the isolated end-to-end test.');
+    await freshPage.getByLabel('Membership',{exact:true}).selectOption('approval');
+    await freshPage.getByRole('button',{name:'Create your circle'}).click();
+    await freshPage.locator('.circle-card').filter({hasText:name}).getByRole('button',{name:'Your circle'}).click();
+    await expect(freshPage).toHaveURL(/#circle\//);
+    const circleURL=freshPage.url();
+    await freshPage.getByRole('button',{name:'Edit workshop brief'}).click();
+    await freshPage.getByLabel('Current workshop prompt').fill('A confidential test prompt visible only to members.');
+    await freshPage.getByRole('button',{name:'Save workshop brief'}).click();
+    await freshPage.getByLabel('Start a conversation').fill('A members-only test discussion.');
+    await freshPage.getByRole('button',{name:'Post to the circle',exact:true}).click();
+    const visitorContext=await browser.newContext(device),visitor=await visitorContext.newPage();
+    try {
+      await registerWriter(visitor,`ci-visitor-${Date.now()}-${testInfo.project.name}@example.test`,'CI Circle Visitor');
+      await visitor.goto(circleURL);
+      await expect(visitor.getByRole('heading',{name:'A members-only workshop.'})).toBeVisible();
+      await expect(visitor.getByText('A confidential test prompt visible only to members.',{exact:true})).toHaveCount(0);
+      await expect(visitor.getByText('A members-only test discussion.',{exact:true})).toHaveCount(0);
+      await visitor.getByRole('button',{name:'Request to join',exact:true}).click();
+      await expect(visitor.getByRole('button',{name:'Cancel membership request'})).toBeVisible();
+      await freshPage.reload();
+      await freshPage.getByText('Circle access & membership',{exact:true}).click();
+      await freshPage.getByRole('button',{name:'Approve CI Circle Visitor',exact:true}).click();
+      await visitor.reload();
+      await expect(visitor.getByText('A confidential test prompt visible only to members.',{exact:true})).toBeVisible();
+      await expect(visitor.getByText('A members-only test discussion.',{exact:true})).toBeVisible();
+      expect(await visitor.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true);
+    } finally { await visitorContext.close().catch(()=>{}); }
+  } finally { await fresh.close().catch(()=>{}); }
+});
+
+test('content-note suggestions require per-check consent and explicit application',async({page},testInfo)=>{
+  await registerWriter(page,`ci-themes-${Date.now()}-${testInfo.project.name}@example.test`,'CI Theme Writer');
+  // Do not send test drafts to a model or spend gateway credits in CI.
+  let requests=0;
+  await page.route('**/api/content-check',async route=>{requests++;expect(route.request().postDataJSON().consent).toBe(true);await route.fulfill({json:{suggestions:[{theme:'Violence',uncertain:false},{theme:'Trauma',uncertain:true}]}});});
+  await page.getByRole('button',{name:'Share your writing',exact:true}).click();
+  await page.getByRole('textbox',{name:'Your writing',exact:true}).fill('A fictional passage used only in automated browser testing.');
+  await page.getByText('Submission settings',{exact:false}).click();
+  await page.getByText('Optional content-note check with Jev',{exact:true}).click();
+  const check=page.getByRole('button',{name:'Check content notes',exact:true});
+  await expect(check).toBeDisabled();expect(requests).toBe(0);
+  await page.getByLabel(/I agree to send this draft/).check();
+  await check.click();
+  await expect(page.getByRole('button',{name:'Add suggested content notes'})).toBeVisible();
+  await expect(page.getByLabel('Contains mature themes')).not.toBeChecked();
+  await expect(check).toBeDisabled();
+  await page.getByRole('button',{name:'Add suggested content notes'}).click();
+  await expect(page.getByLabel('Contains mature themes')).toBeChecked();
+  await expect(page.getByLabel('Violence',{exact:true})).toBeChecked();
+  await expect(page.getByLabel('Trauma',{exact:true})).toBeChecked();
+  await page.getByRole('textbox',{name:'Your writing',exact:true}).fill('A revised passage invalidates the previous theme assessment.');
+  await expect(page.getByText('Your text changed after this check.',{exact:false})).toBeVisible();
+  expect(requests).toBe(1);
 });

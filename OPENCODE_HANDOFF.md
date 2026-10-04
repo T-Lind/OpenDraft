@@ -1,8 +1,50 @@
 # OpenCode handoff — OpenDraft
 
-Date: 2026-10-03
+Date: 2026-10-04
 
-## Current pass: mobile reading, workshops, and critique reservations
+## Current pass: approval-only circles, portable settings, and human safety review
+
+Migration `0016_mature_sabretooth` adds `reading_preferences`, `circle_requests`,
+and circle access (`open` by default). Review/apply it before deploying this code.
+Both new user tables use active-member INSERT guards. Preferences use optimistic
+timestamps; account export and deletion include new user records.
+
+Reading settings remain browser-persistent, with explicit private account defaults.
+Defaults load on first use of an account in a browser; local adjustments survive
+reload. Explicit load/save/remove controls and conflicts protect other-device copies.
+Approval-only briefs and discussions are projected/filter-checked in detail, list,
+snapshot, and posts APIs. Owners approve/decline requests and remove members.
+Opening requires explicit exposure confirmation. Membership changes preserve
+published-manuscript visibility; this is not private draft/manuscript sharing.
+
+Admin account triage uses only unresolved work/message reports and existing message
+flags within 30 days, with distinct reporters and case references. It is not an
+offender verdict or automatic enforcement mechanism. Existing human case decisions
+remain authoritative. No private-draft scanning or AI-authorship detection was added.
+
+Optional editor theme checks call `/api/content-check`, sending only current text
+after per-request consent. Jev uses fixed theme rubrics. Checks are limited to 5 per
+member/day and 25 globally/day; results are ephemeral, edit-invalidated, advisory,
+and never required for publishing. Author applies suggested notes explicitly.
+Provider/model output is validated and is not copied to moderation records. Routing
+requires TypeSafe + no prompt training; no compatible provider means unavailable,
+not a fallback that silently weakens privacy. Do not claim zero provider retention.
+
+GitHub browser jobs now cover desktop Chromium, Android-style touch Chromium, and
+iPhone-style WebKit on separate disposable PostgreSQL services. No hardware-device
+coverage is claimed. The isolated fixture on 5182 must be restarted after edits.
+
+Observed owner setup links: GitHub Vercel installation
+https://github.com/settings/installations/55539351 then project Git settings
+https://vercel.com/tiernan-lindauers-projects/opendraft-workshop/settings/git .
+The project is unconnected, and OpenDraft is absent from its GitHub repo picker.
+Project data preferences at
+https://vercel.com/tiernan-lindauers-projects/opendraft-workshop/settings#data-preferences
+currently show code/chat model-training opt-in checked (read-only inspection;
+not changed). This is distinct from per-request AI Gateway no-training routing.
+Email/password production still needs an owner-verified Resend sender domain.
+
+## Previous pass: mobile reading, workshops, and critique reservations
 
 Migration `0015_outstanding_black_panther` adds owner-managed workshop brief fields
 to circles, `circle_readings`, and `critique_reservations`. It is applied to the

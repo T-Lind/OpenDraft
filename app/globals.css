@@ -1968,6 +1968,16 @@ html.dark .pending-comment { background: #354c75; color: #e4edff; }
 .hist-label { font-size: 9px; color: var(--ink-muted); margin-top: 6px; white-space: nowrap; }
 
 .admin-list { display: flex; flex-direction: column; gap: 8px; }
+.admin-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 12px 0 18px; color: var(--ink); font-size: 13px; }
+.admin-filter .form-select { width: min(220px, 100%); min-height: 44px; margin: 0; }
+.circle-members { display: grid; gap: 14px; padding-top: 16px; }
+.circle-member { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.circle-member > div { min-width: 0; }
+.circle-member strong { overflow-wrap: anywhere; }
+.circle-member small { display: block; color: var(--muted); }
+.content-theme-check { margin-bottom: 20px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; }
+.content-theme-check summary { cursor: pointer; font-weight: 600; }
+.content-theme-check .preference-check { margin-bottom: 14px; }
 .admin-row { display: flex; gap: 12px; align-items: flex-start; background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 12px; }
 .admin-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; color: #7a4bb0; background: rgba(122,75,176,0.12); border-radius: 3px; padding: 3px 7px; flex-shrink: 0; }
 .admin-tag.danger { color: var(--destructive); background: rgba(176,40,31,0.12); }

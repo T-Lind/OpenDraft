@@ -11,12 +11,14 @@ export async function GET(){
   await rateLimit(db,'export:'+uid,3,3_600_000);
   const profile=await db.prepare('SELECT * FROM profiles WHERE id=?').bind(uid).first();
   const sections=[
+   ['readingPreferences','SELECT user_id AS id,preferences,updated_at FROM reading_preferences WHERE user_id=?',[uid]],
    ['writing','SELECT * FROM works WHERE author_id=?', [uid]],
    ['critiquesGiven','SELECT * FROM reviews WHERE user_id=?',[uid]],
    ['critiquesReceived','SELECT r.* FROM reviews r JOIN works w ON w.id=r.work_id WHERE w.author_id=?',[uid]],
    ['annotations','SELECT a.* FROM annotations a JOIN works w ON w.id=a.work_id WHERE a.user_id=? OR w.author_id=?',[uid,uid]],
    ['bookmarks','SELECT b.* FROM bookmarks b WHERE b.user_id=?',[uid]],
    ['circles','SELECT c.* FROM circles c JOIN memberships m ON m.circle_id=c.id WHERE m.user_id=?',[uid]],
+   ['circleRequests','SELECT * FROM circle_requests WHERE user_id=?',[uid]],
    ['posts','SELECT * FROM posts WHERE user_id=?',[uid]],
    ['ratings','SELECT * FROM critique_ratings WHERE rater_id=?',[uid]],
    ['friends',"SELECT * FROM friendships WHERE low_id=? OR high_id=?",[uid,uid]],
