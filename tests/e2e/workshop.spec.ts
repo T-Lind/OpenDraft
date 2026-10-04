@@ -134,8 +134,7 @@ test('a line comment appears as an inline chip and the manuscript continues afte
 
   const chip = firstParagraph.locator('.annotation-chip');
   await expect(chip).toBeVisible();
-  await expect(chip).toContainText('CI Commenter:');
-  await expect(chip).toContainText('This opening image lands.');
+  await expect(chip).toHaveText('This opening image lands.');
   expect(await page.locator('.annotation-margin, .annotation-margin-card').count()).toBe(0);
   expect(await chip.evaluate(element => ({
     livesInsideParagraph: element.parentElement?.matches('p[data-para="0"]') ?? false,

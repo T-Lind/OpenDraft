@@ -347,7 +347,6 @@ function renderParagraph(plain: string, runs: InlineRun[], para: number, annos: 
           aria-label={`Comment by ${a.author}: ${a.body}`}
         >
           <MessageSquare size={11} aria-hidden="true" />
-          <span className="annotation-chip-author">{a.author}:</span>
           <span className="annotation-chip-body">{formatInline(a.body)}</span>
         </button>,
       );

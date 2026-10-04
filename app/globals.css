@@ -2279,7 +2279,6 @@ html.dark .status-label { background:var(--secondary); color:var(--ink-soft); bo
 .annotation-chip:hover { border-color: var(--link); background: color-mix(in srgb, var(--surface-info) 86%, var(--link)); }
 .annotation-chip.selected, .annotation-chip:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .annotation-chip svg { align-self: center; flex: 0 0 auto; }
-.annotation-chip-author { flex: 0 1 auto; max-width: 12rem; overflow: hidden; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .annotation-chip-body { min-width: 0; overflow-wrap: anywhere; }
 .anno.selected { outline: 2px solid var(--link); outline-offset: 2px; }
 
