@@ -283,6 +283,7 @@ test('approval-only circles protect context until the owner approves, and accoun
     await freshPage.getByLabel('Membership',{exact:true}).selectOption('approval');
     await freshPage.getByRole('button',{name:'Create your circle'}).click();
     await freshPage.locator('.circle-card').filter({hasText:name}).getByRole('button',{name:'Your circle'}).click();
+    await expect(freshPage).toHaveURL(/#circle\//);
     const circleURL=freshPage.url();
     await freshPage.getByRole('button',{name:'Edit workshop brief'}).click();
     await freshPage.getByLabel('Current workshop prompt').fill('A confidential test prompt visible only to members.');
@@ -305,8 +306,8 @@ test('approval-only circles protect context until the owner approves, and accoun
       await expect(visitor.getByText('A confidential test prompt visible only to members.',{exact:true})).toBeVisible();
       await expect(visitor.getByText('A members-only test discussion.',{exact:true})).toBeVisible();
       expect(await visitor.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true);
-    } finally { await visitorContext.close(); }
-  } finally { await fresh.close(); }
+    } finally { await visitorContext.close().catch(()=>{}); }
+  } finally { await fresh.close().catch(()=>{}); }
 });
 
 test('content-note suggestions require per-check consent and explicit application',async({page},testInfo)=>{
@@ -314,7 +315,7 @@ test('content-note suggestions require per-check consent and explicit applicatio
   // Do not send test drafts to a model or spend gateway credits in CI.
   let requests=0;
   await page.route('**/api/content-check',async route=>{requests++;expect(route.request().postDataJSON().consent).toBe(true);await route.fulfill({json:{suggestions:[{theme:'Violence',uncertain:false},{theme:'Trauma',uncertain:true}]}});});
-  await page.getByRole('button',{name:'Post a work for critique'}).first().click();
+  await page.getByRole('button',{name:'Share your writing',exact:true}).click();
   await page.getByRole('textbox',{name:'Your writing',exact:true}).fill('A fictional passage used only in automated browser testing.');
   await page.getByText('Submission settings',{exact:false}).click();
   await page.getByText('Optional content-note check with Jev',{exact:true}).click();

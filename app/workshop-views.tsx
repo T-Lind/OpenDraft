@@ -1097,7 +1097,7 @@ export function Circles({ data, act, busy,initialSelected='',onOpenStory,onVisit
             <label className="field-label">Circle name<Input required minLength={3} maxLength={80} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></label>
             <label className="field-label">What brings you together?<Textarea required minLength={15} maxLength={600} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></label>
             <FieldSelect label="Genre" value={form.genre} options={genres.slice(1)} change={genre => setForm(f => ({ ...f, genre }))} />
-            <label className="field-label">Membership<select className="form-select" value={form.access} onChange={event=>setForm(f=>({...f,access:event.target.value}))}><option value="open">Open · anyone can join</option><option value="approval">Approval-only · owner accepts requests</option></select></label><p className="fine-print">Name and description stay discoverable. Approval-only briefs and discussions are members-only; published writing remains public.</p>
+            <label className="field-label">Membership<select aria-label="Membership" className="form-select" value={form.access} onChange={event=>setForm(f=>({...f,access:event.target.value}))}><option value="open">Open · anyone can join</option><option value="approval">Approval-only · owner accepts requests</option></select></label><p className="fine-print">Name and description stay discoverable. Approval-only briefs and discussions are members-only; published writing remains public.</p>
             <Button disabled={busy} type="submit" className="primary-button">Create your circle</Button>
           </form>
         </DialogContent>
