@@ -8,6 +8,7 @@ import {rateLimit,requestRateLimit} from '@/lib/rate-limit';
 import {deleteAccount} from '@/lib/account-deletion';
 import {evaluateShowcase} from '@/lib/jev';
 import {camel} from '@/lib/workshop-query';
+import {saveAccountPreferences} from '@/lib/account-preferences';
 export const dynamic='force-dynamic';
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 function error(e:unknown){const err=e as Error&{status?:number;retryAfter?:number};if(e instanceof SyntaxError)return json({error:'Invalid JSON request.'},400);if(e instanceof z.ZodError)return json({error:e.issues[0]?.message||'Invalid request.'},400);if(!err.status)console.error('Community operation failed');return Response.json({error:err.status?err.message:'This action could not complete. Please retry.'},{status:err.status||503,headers:{'Cache-Control':'no-store',...(err.retryAfter?{'Retry-After':String(err.retryAfter)}:{})}});}
@@ -37,6 +38,7 @@ export async function POST(request:Request){
    await db.prepare('UPDATE profiles SET terms_version=?,terms_accepted_at=? WHERE id=? AND deleted_at=0').bind(TERMS_VERSION,now,uid).run();return json({ok:true,version:TERMS_VERSION});
   }
   if(action==='settings'){const friendsOnly=z.boolean().parse(b.friendsOnly);await db.prepare('UPDATE profiles SET friends_only=? WHERE id=? AND deleted_at=0').bind(friendsOnly,uid).run();return json({ok:true});}
+  if(action==='readingPreferences')return json(await saveAccountPreferences(db,uid,b.preferences,z.number().int().nonnegative().parse(b.expectedUpdatedAt),now));
   if(action==='revokeSessions'){
    await rateLimit(db,'session-revoke:'+uid,5,86400000,now);
    await db.prepare('UPDATE profiles SET session_valid_after=? WHERE id=? AND deleted_at=0').bind(Math.floor(now/1000)+1,uid).run();

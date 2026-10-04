@@ -30,7 +30,7 @@ function WorkshopBriefEditor({ circle, act, busy, close }: { circle: Circle; act
     <div className="form-grid"><label className="field-label">Workshop meeting<Input name="meetingAt" type="datetime-local" max="2099-12-31T23:59" defaultValue={form.meetingAt}/></label><label className="field-label">Feedback due by<Input name="feedbackDueAt" type="datetime-local" max="2099-12-31T23:59" defaultValue={form.feedbackDueAt}/></label></div>
     <p className="fine-print">Enter times in your local time zone ({Intl.DateTimeFormat().resolvedOptions().timeZone}). Each member sees the time in their own zone. Clear a date to remove it.</p>
     <label className="field-label">Meeting place or call details<Input maxLength={240} placeholder="Room, meeting link, or where to find the call details" value={form.meetingPlace} onChange={event => setForm({ ...form, meetingPlace: event.target.value })}/></label>
-    <p className="fine-print">Circles are open to signed-in workshop members. Do not put private addresses, meeting passwords, or confidential writing in the brief.</p>
+    <p className="fine-print">{circle.access==='approval'?'Only approved members can read this brief. Members can still copy or share what they see; avoid sensitive personal information.':'This is an open circle. Do not put private addresses, meeting passwords, or confidential writing in the brief.'}</p>
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="form-actions"><Button type="button" variant="outline" disabled={busy} onClick={close}>Cancel</Button><Button type="submit" disabled={busy} className="primary-button">{busy ? 'Saving…' : 'Save workshop brief'}</Button></div>
   </form>;
@@ -49,6 +49,7 @@ export function CircleWorkshop({ circle, uid, act, busy, revision, onOpenStory }
     try { await navigator.clipboard.writeText(link); setCopyNotice('Circle link copied. New members will need to sign in and join.'); }
     catch { setCopyNotice('Copy the circle link below. New members will need to sign in and join.'); }
   };
+  if(circle.access==='approval'&&!circle.joined)return <section className="circle-workshop"><h3>A members-only workshop.</h3><p className="fine-print">Request membership to read the brief, meeting details, reading list, and discussion. The owner must approve your request. Published manuscripts are not made private by this setting.</p></section>;
   return <section className="circle-workshop" aria-label="Circle workshop">
     <header className="workshop-section-heading"><div><p className="eyebrow">At this workshop</p><h3>A shared plan for your next drafts.</h3></div><div className="workshop-buttons"><Button type="button" variant="outline" onClick={() => void copy()}><Link2 size={15}/>Copy circle link</Button>{owner && <Button type="button" variant="outline" aria-expanded={edit} onClick={() => setEdit(value => !value)}>{edit ? 'Close brief editor' : 'Edit workshop brief'}</Button>}</div></header>
     {copyNotice && <div className="workshop-share"><p className="fine-print" role="status">{copyNotice}</p><Input aria-label="Shareable circle link" readOnly value={shareUrl} onFocus={event => event.target.select()}/></div>}
@@ -77,6 +78,6 @@ export function CircleWorkshop({ circle, uid, act, busy, revision, onOpenStory }
       <PageMore page={readings} label="More workshop readings"/>
       {!readings.loading && !readings.error && !readings.items.length && <p className="workshop-empty">Put the works for your next session here so every member knows what to read.</p>}
     </> : <p className="workshop-empty">Join this circle to see and contribute to the shared reading list.</p>}
-    <p className="fine-print">Open circle · brief and discussion visible to workshop members. Send an inbox bulletin when the plan changes.</p>
+    <p className="fine-print">{circle.access==='approval'?'Approval-only circle · brief and discussion visible only to current members.':'Open circle · brief and discussion visible to signed-in workshop members.'} Send an inbox bulletin when the plan changes.</p>
   </section>;
 }

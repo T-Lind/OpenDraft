@@ -4,6 +4,8 @@ export async function deleteAccount(db:Database,uid:string){
  const now=Date.now();
  const statements=[
  db.prepare('DELETE FROM auth_tokens WHERE profile_id=?').bind(uid),
+ db.prepare('DELETE FROM reading_preferences WHERE user_id=?').bind(uid),
+ db.prepare('DELETE FROM circle_requests WHERE user_id=? OR circle_id IN (SELECT id FROM circles WHERE owner_id=?)').bind(uid,uid),
  db.prepare('DELETE FROM critique_reservations WHERE user_id=? OR work_id IN (SELECT id FROM works WHERE author_id=?)').bind(uid,uid),
  db.prepare('DELETE FROM circle_readings WHERE added_by=? OR work_id IN (SELECT id FROM works WHERE author_id=?)').bind(uid,uid),
  db.prepare('DELETE FROM auth_credentials WHERE profile_id=?').bind(uid),

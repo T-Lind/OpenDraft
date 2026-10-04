@@ -1,6 +1,7 @@
 import type { Database } from '@/db/storage';
 import { cursorFor, limitFor, pageOf, readCursor } from './pagination';
 import { reservationStatus } from './critique-reservations';
+import { circleProjection } from './circle-access';
 
 export type Row = Record<string, unknown>;
 export const camel = (row: Row): Row => Object.fromEntries(Object.entries(row).map(([key,value])=>[key.replace(/_([a-z])/g,(_,letter)=>letter.toUpperCase()),value]));
@@ -66,13 +67,18 @@ export async function queryCollection(db: Database, uid: string, params: URLSear
  } else if(collection==='circles') {
   const author=params.get('author');
   const where=author?' WHERE EXISTS(SELECT 1 FROM memberships m WHERE m.circle_id=c.id AND m.user_id=?)':' WHERE true';
-  rows=(await db.prepare(`SELECT c.*,(SELECT COUNT(*) FROM memberships m WHERE m.circle_id=c.id)::int AS members,EXISTS(SELECT 1 FROM memberships m WHERE m.circle_id=c.id AND m.user_id=?) AS joined FROM circles c${where}${cursor?' AND (c.name,c.id)>(?,?)':''} ORDER BY c.name,c.id LIMIT ?`).bind(uid,...(author?[author.slice(0,100)]:[]),...afterValues,limit+1).all()).results;
+  rows=(await db.prepare(`WITH viewer AS (SELECT ?::text AS uid) SELECT ${circleProjection} FROM circles c${where}${cursor?' AND (c.name,c.id)>(?,?)':''} ORDER BY c.name,c.id LIMIT ?`).bind(uid,...(author?[author.slice(0,100)]:[]),...afterValues,limit+1).all()).results;
   const page=pageOf(rows,limit,row=>String(row.name));return {...page,items:page.items.map(camel)};
  } else if(collection==='circle') {
-  const circle=await db.prepare(`SELECT c.*,(SELECT COUNT(*) FROM memberships m WHERE m.circle_id=c.id)::int AS members,EXISTS(SELECT 1 FROM memberships m WHERE m.circle_id=c.id AND m.user_id=?) AS joined FROM circles c WHERE c.id=?`).bind(uid,id).first();
+  const circle=await db.prepare(`WITH viewer AS (SELECT ?::text AS uid) SELECT ${circleProjection} FROM circles c WHERE c.id=?`).bind(uid,id).first();
   if(!circle)throw Object.assign(new Error('This circle is unavailable.'),{status:404});return {circle:camel(circle)};
  } else if(collection==='posts') {
-  rows=(await db.prepare(`SELECT * FROM posts WHERE circle_id=?${after} ORDER BY created_at DESC,id DESC LIMIT ?`).bind(id,...afterValues,limit+1).all()).results;
+  rows=(await db.prepare(`SELECT * FROM posts WHERE circle_id=? AND EXISTS(SELECT 1 FROM circles c WHERE c.id=posts.circle_id AND (c.access='open' OR EXISTS(SELECT 1 FROM memberships m WHERE m.circle_id=c.id AND m.user_id=?)))${after} ORDER BY created_at DESC,id DESC LIMIT ?`).bind(id,uid,...afterValues,limit+1).all()).results;
+ } else if(collection==='circleMembers'||collection==='circleRequests') {
+  if(!await db.prepare('SELECT id FROM circles WHERE id=? AND owner_id=?').bind(id,uid).first())throw Object.assign(new Error('Only the circle owner can manage membership.'),{status:403});
+  const table=collection==='circleMembers'?'memberships':'circle_requests';
+  rows=(await db.prepare(`SELECT m.id,m.user_id,p.name,${table==='memberships'?'0::bigint':'m.created_at'} AS created_at FROM ${table} m JOIN profiles p ON p.id=m.user_id WHERE m.circle_id=? AND p.deleted_at=0${cursor?' AND m.id>?':''} ORDER BY m.id LIMIT ?`).bind(id,...(cursor?[cursor.id]:[]),limit+1).all()).results;
+  const page=pageOf(rows,limit);return {...page,items:page.items.map(camel)};
  } else if(collection==='circleReadings') {
   if(!await db.prepare('SELECT id FROM memberships WHERE user_id=? AND circle_id=?').bind(uid,id).first())throw Object.assign(new Error('Join this circle to see its workshop reading list.'),{status:403});
   rows=(await db.prepare(`SELECT cr.id,cr.work_id,cr.added_by,cr.created_at,w.title,w.author,w.genre,w.words FROM circle_readings cr JOIN works w ON w.id=cr.work_id WHERE cr.circle_id=? AND ${publicWork}${cursor?' AND (cr.created_at,cr.id)<(?,?)':''} ORDER BY cr.created_at DESC,cr.id DESC LIMIT ?`).bind(id,...afterValues,limit+1).all()).results;

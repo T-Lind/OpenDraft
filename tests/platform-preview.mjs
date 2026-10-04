@@ -9,13 +9,14 @@ import {createServer} from 'node:http';
 const directory='.sites-runtime/platform-preview';mkdirSync(directory,{recursive:true});
 writeFileSync(`${directory}/entry.tsx`, `
 import React from 'react';import {createRoot} from 'react-dom/client';import {ThemeProvider} from 'next-themes';import Workshop from '../../app/workshop';import {ReadingPreferencesProvider} from '../../components/reading-preferences';
-function Fixture(){return <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="theme" disableTransitionOnChange><Workshop/><div style={{position:'fixed',bottom:8,left:10,zIndex:80,fontSize:10}}><button onClick={()=>{const el=document.querySelector('[contenteditable="true"]');if(!el)return;el.focus();const data=new DataTransfer();data.setData('text/html','<h1 style="color:red"><b>Bold</b> <i>italic</i> <u>underline</u> <a href="javascript:alert(1)">plain link text</a><img src="x" onerror="alert(1)"><script>alert(1)</script></h1>');el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));}}>Paste formatting sample</button><span> · Isolated fixture</span></div></ThemeProvider>};
-createRoot(document.getElementById('root')!).render(<ReadingPreferencesProvider><Fixture/></ReadingPreferencesProvider>);`);
+function Fixture(){return <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="theme" disableTransitionOnChange><ReadingPreferencesProvider><Workshop/><div style={{position:'fixed',bottom:8,left:10,zIndex:80,fontSize:10}}><button onClick={()=>{const el=document.querySelector('[contenteditable="true"]');if(!el)return;el.focus();const data=new DataTransfer();data.setData('text/html','<h1 style="color:red"><b>Bold</b> <i>italic</i> <u>underline</u> <a href="javascript:alert(1)">plain link text</a><img src="x" onerror="alert(1)"><script>alert(1)</script></h1>');el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));}}>Paste formatting sample</button><span> · Isolated fixture</span></div></ReadingPreferencesProvider></ThemeProvider>};
+createRoot(document.getElementById('root')!).render(<Fixture/>);`);
 await build({entryPoints:{fixture:`${directory}/entry.tsx`,data:'app/data.ts'},outdir:directory,outExtension:{'.js':'.mjs'},bundle:true,format:'esm',platform:'browser',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'},plugins:[{name:'fixture-link',setup(b){b.onResolve({filter:/^next\/link$/},()=>({path:'link',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'import React from "react";export default function Link(props){return React.createElement("a",props)}',loader:'js',resolveDir:resolve('.')}));}}]});
 const stylesheet=await postcss([tailwind()]).process(readFileSync('app/globals.css','utf8'),{from:resolve('app/globals.css')});writeFileSync(`${directory}/styles.css`,transform({code:Buffer.from(stylesheet.css),minify:true}).code);
 const {sampleWorks,sampleCircles}=await import('../'+directory+'/data.mjs');
 const user={id:'ui-fixture',name:'Test Writer',bio:'A synthetic writing profile.',credits:15,termsVersion:'2026-10-03',onboardingCompleted:true,currentStreak:1,longestStreak:1};
 let avatar=null;
+let accountCopy={preferences:null,updatedAt:0};
 let works=[...sampleWorks,{...sampleWorks[0],id:'private-test',authorId:user.id,author:user.name,title:'Test Writing',content:'A quiet blue morning waits beyond the window.',status:'draft',words:8,revisionOf:'revision-source',version:2},{...sampleWorks[0],id:'revision-source',authorId:user.id,author:user.name,title:'Test Writing, first version',content:'A quiet morning waits beyond the window.\n\nThe light reaches the empty chair.',status:'open',words:15,version:1,showcaseOptIn:true,aiShowcaseConsent:false}];
 const circles=[...sampleCircles.map(c=>({...c,ownerId:'system',joined:false})),{id:'fixture-circle',name:'The writing table',description:'A circle for testing owner bulletins and discussion.',genre:'Other writing',ownerId:user.id,joined:true,members:3}];
 let failSave=false;
@@ -39,6 +40,7 @@ createServer(async(req,res)=>{
   if(url.pathname==='/__fixture/fail-save'){failSave=true;send({ok:true});return;}
   let raw='';for await(const chunk of req)raw+=chunk;const body=JSON.parse(raw);
   if(url.pathname==='/api/community'){
+   if(body.action==='readingPreferences'){accountCopy={preferences:body.preferences,updatedAt:body.preferences?Date.now():0};send(accountCopy);return;}
    const person=body.id==='troy'?{userId:'troy',name:'Troy Janus'}:{userId:'maya',name:'Maya Chen'};
    if(body.action==='acceptTerms')user.termsVersion=body.version;
    if(body.action==='settings')friendsOnly=body.friendsOnly;
@@ -57,6 +59,8 @@ createServer(async(req,res)=>{
   }
   if(body.action==='uploadAvatar'){avatar=body.image;user.avatarUpdatedAt=Date.now();}if(body.action==='removeAvatar'){avatar=null;user.avatarUpdatedAt=0;}
   if(body.action==='updateWorkshop')Object.assign(circles.find(c=>c.id===body.circleId),body);
+  if(body.action==='circleAccess')circles.find(c=>c.id===body.circleId).access=body.access;
+  if(url.pathname==='/api/content-check'){send({suggestions:[{theme:'Violence',uncertain:false},{theme:'Death or grief',uncertain:true}]});return;}
   if(body.action==='addCircleReading'){const w=works.find(w=>w.id===body.workId);readings.push({id:'reading-'+Date.now(),circleId:body.circleId,workId:w.id,title:w.title,author:w.author,genre:w.genre,words:w.words,addedBy:user.id,createdAt:Date.now()});}
   if(body.action==='removeCircleReading'){const i=readings.findIndex(r=>r.id===body.readingId);if(i>=0)readings.splice(i,1);}
   if(['reserveCritique','renewCritique','releaseCritique'].includes(body.action)){if(body.action==='reserveCritique')hold={workId:body.workId,title:works.find(w=>w.id===body.workId).title,startedAt:Date.now(),expiresAt:Date.now()+30*60000};if(body.action==='renewCritique'&&hold)hold.expiresAt=Math.min(hold.startedAt+90*60000,Date.now()+30*60000);if(body.action==='releaseCritique')hold=null;send(reservation(body.workId));return;}
@@ -74,6 +78,7 @@ createServer(async(req,res)=>{
  if(url.pathname==='/api/workshop'){const collection=params.get('collection');if(!collection){send(snapshot());return;}if(collection==='critiqueReservation'){send(reservation(params.get('id')));return;}if(collection==='work'){send({work:works.find(w=>w.id===params.get('id'))});return;}if(collection==='circle'){send({circle:circles.find(c=>c.id===params.get('id'))});return;}const lists={works:works.filter(w=>params.get('mode')==='mine'?w.authorId===user.id:w.status!=='draft').sort((a,b)=>b.createdAt-a.createdAt),circles,circleReadings:readings.filter(r=>r.circleId===params.get('id')),posts,conversations:conversations().filter(m=>params.get('unread')!=='1'||m.unread>0),messages:messages.filter(m=>m.conversationId===params.get('id')).sort((a,b)=>b.createdAt-a.createdAt),reviews:reviews.filter(r=>!params.get('id')||r.workId===params.get('id')),annotations:[],events:[],analytics:[]};send(paged(lists[collection]||[],params));return;}
  if(url.pathname==='/api/community'){
   const section=params.get('section'),id=params.get('id');
+  if(section==='readingPreferences'){send(accountCopy);return;}
   if(section==='reputation'){send({items:(params.get('ids')||'').split(',').map(id=>({id,ratings:12,writers:6,eligible:true,combined:86,usefulness:90,specificity:84,actionability:84}))});return;}
   if(section==='showcase'){const w=works.find(w=>w.id==='revision-source');send({showcase:w.showcaseOptIn?{...w,note:'A thoughtful opening with room for a promising revision.',day:new Date().toISOString().slice(0,10)}:null});return;}
   if(section==='status'){send({friendsOnly,requests:friends.filter(f=>f.incoming&&f.status==='pending').length});return;}

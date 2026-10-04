@@ -24,6 +24,8 @@ import { useDraftAutosave } from '@/hooks/use-draft-autosave';
 import { ReadingSettings, useReadingPreferences, prefersReducedMotion } from '@/components/reading-preferences';
 import { CritiqueReservation, useCritiqueReservation } from '@/components/critique-reservation';
 import { CircleWorkshop } from '@/components/circle-workshop';
+import { CircleMembers } from '@/components/circle-members';
+import { ContentThemeCheck } from '@/components/content-theme-check';
 
 function FieldSelect({ label, value, options, change }: { label: string; value: string; options: string[]; change: (v: string) => void }) {
   return <label className="field-label">{label}<select className="form-select" value={value} onChange={e => change(e.target.value)}>{options.map(o => <option key={o}>{o}</option>)}</select></label>;
@@ -187,6 +189,7 @@ export function Editor({ initial, credits, act, busy, onDone, close, onSaved,rev
         )}
       </div>
       <div className="reviewers-box">
+        <ContentThemeCheck content={work.content} selected={themes} apply={next=>{update('mature',true);update('themes',next.join(', '));}}/>
         <div className="form-grid">
           <FieldSelect label="Reviewers to request" value={String(work.targetReviews || 2)} options={['2', '3', '4', '5']} change={v => update('targetReviews', Number(v))} />
           <label className="field-label">Who can see the critiques
@@ -1045,29 +1048,30 @@ function NewMessageDialog({ open, onOpenChange, onSend, busy }: { open: boolean;
 
 export function Circles({ data, act, busy,initialSelected='',onOpenStory,onVisit }: { data: Snapshot; act: Act; busy: boolean;initialSelected?:string;onOpenStory:(id:string)=>void;onVisit:(id:string)=>void }) {
   const selected=initialSelected;
-  const [body, setBody] = useState(''), [create, setCreate] = useState(false), [form, setForm] = useState({ name: '', description: '', genre: 'Literary fiction' });
+  const [body, setBody] = useState(''), [create, setCreate] = useState(false), [form, setForm] = useState({ name: '', description: '', genre: 'Literary fiction',access:'open' });
   const [bulletin,setBulletin]=useState('');
   const circles=usePagedList<Circle>('/api/workshop?collection=circles',!selected,data.revision);
-  const discussion=usePagedList<Snapshot['posts'][number]>('/api/workshop?collection=posts&id='+encodeURIComponent(selected),!!selected,data.revision);
   const [detail,setDetail]=useState<Circle|null>(null);
   const [circleError,setCircleError]=useState('');
   useEffect(()=>{if(!selected)return;const controller=new AbortController();fetch('/api/workshop?collection=circle&id='+encodeURIComponent(selected),{signal:controller.signal}).then(async response=>{const result=await response.json() as {circle:Circle;error?:string};if(!response.ok)throw new Error(result.error||'This circle is unavailable.');setDetail(result.circle);setCircleError('');}).catch(error=>{if(!controller.signal.aborted)setCircleError(error.message);});return()=>controller.abort();},[selected,data.revision]);
   const circle = detail?.id===selected?detail:circles.items.find(c=>c.id===selected)||data.circles.find(c=>c.id===selected);
+  const canReadDiscussion=!!circle&&(circle.access!=='approval'||!!circle.joined);
+  const discussion=usePagedList<Snapshot['posts'][number]>('/api/workshop?collection=posts&id='+encodeURIComponent(selected),!!selected&&canReadDiscussion,data.revision);
   const posts = discussion.items;
   if (circle) return (
     <div className="circle-room">
       <button className="text-link" onClick={() => onVisit('')} style={{ marginBottom: 12 }}><ArrowLeft size={14} />All writing circles</button>
       <div className="circle-room-heading">
         <span className="circle-symbol tone-1">{circle.name[0]}</span>
-        <div><h2>{circle.name}</h2><p>{circle.description}</p><small>{circle.members} {circle.members === 1 ? 'member' : 'members'} · {circle.genre}</small></div>
-        <Button variant={circle.joined ? 'outline' : 'default'} disabled={busy||circle.ownerId===data.user?.id} onClick={() => void act({ action: 'join', circleId: circle.id, joined: !circle.joined }, circle.joined ? 'You left the circle.' : 'Welcome to the circle.')}>{circle.ownerId===data.user?.id?'Circle owner':circle.joined ? 'Leave circle' : 'Join circle'}</Button>
+        <div><h2>{circle.name}</h2><p>{circle.description}</p><small>{circle.members} {circle.members === 1 ? 'member' : 'members'} · {circle.genre} · {circle.access==='approval'?'Approval-only':'Open'}</small></div>
+        <Button variant={circle.joined||circle.requested ? 'outline' : 'default'} disabled={busy||circle.ownerId===data.user?.id} onClick={() => void act({ action: 'join', circleId: circle.id, joined: !circle.joined&&!circle.requested }, circle.joined ? 'You left the circle.' : circle.requested?'Membership request cancelled.':circle.access==='approval'?'Membership request sent to the circle owner.':'Welcome to the circle.')}>{circle.ownerId===data.user?.id?'Circle owner':circle.joined ? 'Leave circle' : circle.requested?'Cancel membership request':circle.access==='approval'?'Request to join':'Join circle'}</Button>
       </div>
       <CircleWorkshop circle={circle} uid={data.user?.id || ''} act={act} busy={busy} revision={data.revision} onOpenStory={onOpenStory}/>
+      {circle.ownerId===data.user?.id&&<CircleMembers circle={circle} act={act} busy={busy} revision={data.revision}/>}
       <div className="discussion-heading"><h3>Around the table</h3><span>Talk craft, trade ideas, get unstuck.</span></div>
       {circle.ownerId===data.user?.id&&<details className="workshop-bulletin"><summary>Send an inbox bulletin to your circle</summary><form className="discussion-form bulletin-form" onSubmit={async event=>{event.preventDefault();if(await act({action:'bulletin',circleId:circle.id,body:bulletin},'Bulletin delivered to your circle members.'))setBulletin('');}}><label className="field-label">Send a circle bulletin<Textarea value={bulletin} onChange={event=>setBulletin(event.target.value)} minLength={5} maxLength={4000} required placeholder="An announcement for every current member’s inbox…" /></label><Button type="submit" className="primary-button" disabled={busy||bulletin.trim().length<5}><Send size={14} />Send to all members</Button></form></details>}
       {circle.joined ? <form className="discussion-form" onSubmit={async e => { e.preventDefault(); if (await act({ action: 'post', circleId: circle.id, body }, 'Your note is on the table.')) setBody(''); }}><label className="field-label">Start a conversation<Textarea required minLength={5} maxLength={5000} value={body} onChange={e => setBody(e.target.value)} placeholder="What are you working on? What’s keeping you up at the writing desk?" /></label><Button type="submit" disabled={busy || body.trim().length < 5} className="primary-button">Post to the circle</Button></form> : <div className="notice-box">Join this circle to take part in the conversation.</div>}
-      {posts.length ? posts.map(p => <article className="discussion-post" key={p.id}><div className="feedback-author"><WriterAvatar name={p.author} userId={p.userId} className="avatar tone-0" /><strong>{p.author}</strong><small>{new Date(p.createdAt).toLocaleDateString()}</small></div><p>{p.body}</p></article>) : <div style={{ marginTop: 12 }}><Empty title="Pull up a chair." description="Be the first to start a conversation in this circle." /></div>}
-      <PageMore page={discussion} label="Earlier circle notes" />
+      {canReadDiscussion&&<>{posts.length ? posts.map(p => <article className="discussion-post" key={p.id}><div className="feedback-author"><WriterAvatar name={p.author} userId={p.userId} className="avatar tone-0" /><strong>{p.author}</strong><small>{new Date(p.createdAt).toLocaleDateString()}</small></div><p>{p.body}</p></article>) : <div style={{ marginTop: 12 }}><Empty title="Pull up a chair." description="Be the first to start a conversation in this circle." /></div>}<PageMore page={discussion} label="Earlier circle notes" /></>}
     </div>
   );
   if(selected)return <div className="notice-box" role={circleError?'alert':'status'}>{circleError||'Loading your circle…'}<Button variant="outline" onClick={()=>onVisit('')}>All writing circles</Button></div>;
@@ -1079,7 +1083,7 @@ export function Circles({ data, act, busy,initialSelected='',onOpenStory,onVisit
           <article className="circle-card" key={c.id}>
             <span className={'circle-symbol tone-' + (i % 3)}>{c.name[0]}</span>
             <span className="genre-tag" style={{ position: 'absolute', top: 16, right: 16 }}>{c.genre}</span>
-            <h2>{c.name}</h2><p>{c.description}</p>
+            <h2>{c.name}</h2><p>{c.description}</p><p className="fine-print">{c.access==='approval'?'Approval-only · members-only brief and discussion':'Open · anyone can join'}</p>
             <div className="circle-card-bottom"><span><Users size={14} />{c.members} {c.members === 1 ? 'member' : 'members'}</span><Button variant="outline" onClick={() => onVisit(c.id)}>{c.joined ? <><Check size={14} />Your circle</> : 'Visit circle'}</Button></div>
           </article>
         ))}
@@ -1089,10 +1093,11 @@ export function Circles({ data, act, busy,initialSelected='',onOpenStory,onVisit
         <DialogContent className="compact-dialog">
           <DialogTitle>A new table for your people.</DialogTitle>
           <DialogDescription>Create a writing circle around a genre, a shared project, or the way you like to write.</DialogDescription>
-          <form onSubmit={async e => { e.preventDefault(); if (await act({ action: 'createCircle', circle: form }, 'Your circle is ready.')) { setCreate(false); setForm({ name: '', description: '', genre: 'Literary fiction' }); } }} className="circle-create-form" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <form onSubmit={async e => { e.preventDefault(); if (await act({ action: 'createCircle', circle: form }, 'Your circle is ready.')) { setCreate(false); setForm({ name: '', description: '', genre: 'Literary fiction',access:'open' }); } }} className="circle-create-form" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <label className="field-label">Circle name<Input required minLength={3} maxLength={80} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></label>
             <label className="field-label">What brings you together?<Textarea required minLength={15} maxLength={600} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></label>
             <FieldSelect label="Genre" value={form.genre} options={genres.slice(1)} change={genre => setForm(f => ({ ...f, genre }))} />
+            <label className="field-label">Membership<select className="form-select" value={form.access} onChange={event=>setForm(f=>({...f,access:event.target.value}))}><option value="open">Open · anyone can join</option><option value="approval">Approval-only · owner accepts requests</option></select></label><p className="fine-print">Name and description stay discoverable. Approval-only briefs and discussions are members-only; published writing remains public.</p>
             <Button disabled={busy} type="submit" className="primary-button">Create your circle</Button>
           </form>
         </DialogContent>

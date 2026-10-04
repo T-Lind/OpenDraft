@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -18,6 +18,11 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
+  projects: [
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'], viewport: { width:1440,height:1000 } } },
+    { name: 'android-chromium', use: { ...devices['Pixel 7'], browserName:'chromium' } },
+    { name: 'ios-webkit', use: { ...devices['iPhone 13'], browserName:'webkit' } },
+  ],
   webServer: {
     command: 'npx next dev --hostname 127.0.0.1 --port 5173',
     url: 'http://localhost:5173/api/workshop',

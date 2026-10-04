@@ -65,7 +65,17 @@ jobs:
       - run: npm test
 
   browser-e2e:
-    name: Browser end-to-end
+    name: Browser end-to-end (${{ matrix.project }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: desktop-chromium
+            browser: chromium
+          - project: android-chromium
+            browser: chromium
+          - project: ios-webkit
+            browser: webkit
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -94,14 +104,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
       - run: npm run db:migrate
-      - run: npm run test:e2e
+      - run: npm run test:e2e -- --project=${{ matrix.project }}
       - name: Upload browser traces on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: |
             playwright-report/
             test-results/

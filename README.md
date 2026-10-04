@@ -19,10 +19,20 @@ showcase choices remain human.
 - Browser-persistent reading preferences: serif/sans manuscript fonts, 18/21/24px
   type, spacing and line-length controls, focus reading, higher contrast, link
   underlines, reduced motion, and optional single-key shortcuts. Device reduced
-  motion is always respected. Preferences sync across tabs, not across devices.
+  motion is always respected. Preferences sync across tabs. Signed-in members may
+  explicitly save a private account default, including appearance, to load on a
+  fresh browser; later local changes do not silently overwrite that copy.
 - Owner-managed circle workshop prompts, agendas, meeting times, feedback deadlines,
   shareable circle links, and member-curated published-work reading lists. Circles
-  remain open to signed-in members; this is not private-circle or unpublished-draft sharing.
+  are open or approval-only, with owner request/member controls. Existing circles
+  remain open. Approval-only briefs and discussions are server-protected for current
+  members; names/descriptions stay discoverable and published manuscripts stay public.
+- Operator-only, paginated account review for recent unresolved reports and existing
+  message flags. Counts and distinct reporters are signals for human review, not guilt.
+- Optional writer-consented Jev content-note hints, with per-request consent, no
+  automatic labels or moderation evidence, no authorship detection, and no publishing
+  dependency. Requires configured AI Gateway credentials and a provider route that
+  honors `disallowPromptTraining`; unavailable service leaves manual notes available.
 - Optional server-enforced critique reservations: a 30-minute hold, extension
   during active writing up to a 90-minute total, one hold per reviewer, and explicit
   release. Reading alone does not claim or renew a hold. Requested slots held by
@@ -279,8 +289,10 @@ The browser suite completes onboarding through the real UI, persists and reloads
 a private draft, checks the policy pages, and verifies the 390px mobile landing
 layout has no horizontal overflow. It writes test accounts and drafts, so point
 `DATABASE_URL` only at a disposable database. GitHub Actions provisions a fresh
-PostgreSQL service for every run, installs Chromium, and retains traces, screenshots,
-and video when a browser check fails. No repository database secret is required.
+PostgreSQL service for each desktop Chromium, Android Chromium, and iOS WebKit job.
+The suite also covers inline feedback, persistent account reading defaults,
+approval-only workshops, and consented content-note suggestions. Failed browser
+jobs retain traces, screenshots, and video. No repository database secret is required.
 
 Authentication tests use generated signing keys and mocked Google endpoints to
 check state, PKCE, token validation, replay rejection, cookies, and logout without

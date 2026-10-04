@@ -2,10 +2,12 @@ import type {Database} from '@/db/storage';
 import {camel} from './workshop-query';
 import {readCursor,limitFor,pageOf} from './pagination';
 import {fail} from './member';
+import {readAccountPreferences} from './account-preferences';
 export const showcaseEligibility="w.status NOT IN ('draft','withdrawn') AND w.showcase_opt_in=true AND p.deleted_at=0 AND p.onboarding_completed=true AND NOT EXISTS(SELECT 1 FROM reports r WHERE r.work_id=w.id AND r.status='open')";
 export async function communityRead(db:Database,uid:string,admin:boolean,params:URLSearchParams){
  const section=params.get('section'),cursor=readCursor(params.get('cursor')),limit=limitFor(params);
  const id=(params.get('id')||'').slice(0,100);
+ if(section==='readingPreferences')return readAccountPreferences(db,uid);
  if(section==='relationship'){
   const p=await db.prepare('SELECT id FROM profiles WHERE id=? AND deleted_at=0 AND onboarding_completed=true').bind(id).first();
   const rows=await db.read([db.prepare('SELECT * FROM friendships WHERE low_id=LEAST(?,?) AND high_id=GREATEST(?,?)').bind(uid,id,uid,id),db.prepare('SELECT user_id FROM member_blocks WHERE (user_id=? AND blocked_id=?) OR (user_id=? AND blocked_id=?)').bind(uid,id,id,uid)]);
