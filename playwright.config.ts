@@ -26,6 +26,7 @@ export default defineConfig({
     env: {
       ...process.env,
       NODE_ENV: 'development',
+      SOURCE_REPOSITORY_URL: 'https://github.com/T-Lind/OpenDraft',
     },
   },
 });
