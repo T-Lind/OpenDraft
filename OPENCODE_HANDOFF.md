@@ -5,8 +5,8 @@ Date: 2026-10-03
 ## Current pass: mobile reading, workshops, and critique reservations
 
 Migration `0015_outstanding_black_panther` adds owner-managed workshop brief fields
-to circles, `circle_readings`, and `critique_reservations`. Apply it before deploying
-this version. The new insert guards use the existing active-member database
+to circles, `circle_readings`, and `critique_reservations`. It is applied to the
+production Neon database. The new insert guards use the existing active-member database
 function; account deletion removes these records and clears owned-circle briefs.
 The repository is now connected to https://github.com/T-Lind/OpenDraft on `main`.
 GitHub CI runs code quality, PostgreSQL integration, and Playwright browser flows

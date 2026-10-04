@@ -174,6 +174,20 @@ test('phone navigation, reading preferences, and circle workshops work end to en
   await expect(page.locator('.mobile-nav > button')).toHaveCount(5);
   await expect(page.locator('.sidebar')).not.toBeVisible();
   await page.locator('.topbar-actions').getByRole('button', { name: 'Reading and accessibility settings' }).click();
+  for (const width of [360, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const atBottom of [false, true]) {
+      await page.locator('.preferences-fields').evaluate((element, bottom) => { element.scrollTop = bottom ? element.scrollHeight : 0; }, atBottom);
+      const footer = await page.getByRole('button', { name: 'Done', exact: true }).evaluate(element => {
+        const button = element.getBoundingClientRect();
+        const navigation = document.querySelector('.mobile-nav')?.getBoundingClientRect();
+        const topmost = document.elementFromPoint(button.x + button.width / 2, button.bottom - 2);
+        return { bottom: button.bottom, navigationTop: navigation?.top ?? 0, unobscured: element.contains(topmost) };
+      });
+      expect(footer.bottom).toBeLessThan(footer.navigationTop);
+      expect(footer.unobscured).toBe(true);
+    }
+  }
   await page.getByLabel('Manuscript font').selectOption('sans');
   await page.getByLabel('Reading text size').selectOption('extra-large');
   await page.getByLabel('Text spacing').selectOption('wide');
