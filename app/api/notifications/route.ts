@@ -3,6 +3,7 @@ import { database } from '@/db/storage';
 import {member} from '@/lib/member';
 import { unreadSQL } from '@/lib/workshop-query';
 export const dynamic='force-dynamic';
+export const maxDuration=60;
 export async function GET(){
  try {
   const db=database(),session=await member(db);const uid=session?.uid;

@@ -18,7 +18,7 @@ import {MIN_CRITIQUE_WORDS,CRITIQUE_CREDIT_RULE,critiqueState} from '@/lib/criti
 import {scheduleWorkEmails} from '@/lib/work-updates';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 
