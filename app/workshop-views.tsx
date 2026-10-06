@@ -545,7 +545,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
   const done = w.hasReviewed || data.reviews.some(r => r.workId === w.id && r.userId === uid && r.version === w.version);
   const reviews = data.reviews.filter(r => r.workId === w.id);
   const canAnnotate = !!uid && !own && !done;
-  const reservation = useCritiqueReservation(w.id, canAnnotate, data.revision);
+  const reservation = useCritiqueReservation(w.id, canAnnotate, data.revision, w.version);
   const [critiqueStorageAvailable,setCritiqueStorageAvailable]=useState(true);
   const key = 'opendraft:temporary-critique:' + w.id + ':' + (uid || 'guest') + ':' + w.version;
   const engagement=useReviewEngagement(key,w.version,w.content,manuscriptRef);
@@ -563,9 +563,8 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
     void fetch('/api/workshop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'view', workId: w.id }) }).catch(() => { /* ignore */ });
   }, [uid, own, w.id]);
 
-  const update = (name: string, value:string|boolean) => { if(['overall','strengths','suggestions'].includes(name))reservation.markActive(); const next={...form,[name]:value};setForm(next);try { sessionStorage.setItem(key, JSON.stringify({ ...next, annotations: localAnnotations }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); } };
+  const update = (name: string, value:string|boolean) => { const next={...form,[name]:value};setForm(next);try { sessionStorage.setItem(key, JSON.stringify({ ...next, annotations: localAnnotations }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); } };
   const changeHistory = (change: (current: AnnotationHistory<WorkAnnotation>) => AnnotationHistory<WorkAnnotation>) => {
-    reservation.markActive();
     const next = change(history); setHistory(next);
     try { sessionStorage.setItem(key, JSON.stringify({ ...form, annotations: next.present }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); }
   };

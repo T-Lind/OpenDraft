@@ -2,7 +2,7 @@
 
 Jev processing is authorized by the current workshop terms, accepted once by writer and reviewer. Critique checks run after 5 seconds without edits, no more than once per 30 seconds. Four 0–4 categories are always visible; changed feedback clears old scores. The v2 rubric uses dimension-specific criteria. New earning critiques require at least 175 words, a fresh server Jev average strictly above 2/4, and grounding/usefulness each at least 2/4. Raw scores determine eligibility; client scores never do. Low-scoring feedback shares without credits; provider failure preserves the draft for retry. Migration 0019 stores private final credit decisions and text fingerprints, exported to the reviewer and deleted with either participant. Prior credit balances are unchanged. No per-work or per-check Jev consent controls remain. Critiques must be human-written; there is no AI process selector. Optional reading telemetry remains a separate voluntary pilot and never affects rewards.
 
-Queued works show a database-derived genre queue position and a broad estimate until all requested critiques. Migration 0018 records actual queue-to-room and room-to-completed transitions, excludes examples and administrative status changes without completed feedback, and starts a real observation window. Forecasts require at least a day of observation and three recent events at each stage; otherwise the UI says an estimate is unavailable. The previous notes below describe earlier iterations where they conflict with this section. Migrations 0017/0018/0019 have not been applied to the live database.
+Queued works show a database-derived genre queue position and a broad estimate until all requested critiques. Migration 0018 records actual queue-to-room and room-to-completed transitions, excludes examples and administrative status changes without completed feedback, and starts a real observation window. Forecasts require at least a day of observation and three recent events at each stage; otherwise the UI says an estimate is unavailable. The previous notes below describe earlier iterations where they conflict with this section. Production Neon is migrated through 0020_fixed-critique-reservations (October 6, 2026).
 
 The v2 calibration report is in `tests/fixtures/critique-eval-broad-results.json`: 116 synthetic examples across 17 works, with 30 additional calls repeating ten difficult cases. All 111 supplied quality expectations matched on the final run. These are development labels, not an independent accuracy estimate; quality eligibility is separate from the 175-word minimum. The broader run exposed and corrected a usefulness loophole for one useful observation buried in generic filler. Run the free regression checks with `node tests/critique-credit.test.mjs` and `node tests/critique-check.test.mjs`. Live evaluation is opt-in and requires Gateway credentials: `node scripts/evaluate-critique.mjs --fixtures=tests/fixtures/critique-eval-broad.json --label=broad-review`. That command makes paid model requests; it does not post critiques or change credit balances.
 
@@ -30,8 +30,8 @@ showcase choices remain human.
   Checks send manuscript/request/critique/line notes through the existing no-training
   TypeSafe-only Gateway route. Results are ephemeral and invalidate on edits.
   No automatic moderation penalties or public reputation changes are enabled. New earning critiques require 175 words, a fresh server Jev average strictly above 2/4, and grounding/usefulness each at least 2/4. Final private decisions are exported to the reviewer and removed on either participant’s deletion. Composer scores never authorize rewards.
-  Migrations `0017_loving_jasper_sitwell`, `0018_tidy_senator_kelly`, and `0019_redundant_spencer_smythe` are required before running this code against
-  a database; use the isolated preview on port 5182 to try it without live data.
+  Apply migrations through `0020_fixed-critique-reservations` before running this code against
+  a new database. Production Neon is current; the isolated preview on port 5182 uses no live data.
 
 - Phone-first five-destination navigation (Home, Read, Write, Inbox, More), labeled
   touch-sized critique tools, keyboard-aware comment positioning, and accessible
@@ -54,9 +54,10 @@ showcase choices remain human.
   automatic labels or moderation evidence, no authorship detection, and no publishing
   dependency. Requires configured AI Gateway credentials and a provider route that
   honors `disallowPromptTraining`; unavailable service leaves manual notes available.
-- Optional server-enforced critique reservations: a 30-minute hold, extension
-  during active writing up to a 90-minute total, one hold per reviewer, and explicit
-  release. Reading alone does not claim or renew a hold. Requested slots held by
+- Starting a critique automatically reserves an available reading-room spot for
+  a fixed 30 minutes, with one hold per reviewer and explicit release. Active writing
+  and reloads do not extend it. After expiry, explicitly reserve again if the work
+  remains in the reading room and a spot is available. Reading alone does not claim a hold. Requested slots held by
   someone else cannot be consumed by an unreserved submission; expiry never deletes
   the browser critique draft. Additional feedback is still welcome after a work
   has received its requested critiques, at the normal outside-reading-room rate.

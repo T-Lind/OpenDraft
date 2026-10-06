@@ -110,7 +110,6 @@ test('a line comment appears as an inline chip and the manuscript continues afte
   await page.locator('.work-title').filter({ hasText: 'The last light in the house' }).click();
   await page.locator('.story-cta .primary-button').click();
   await expect(page.getByRole('heading', { name: 'Write a critique' })).toBeVisible();
-  await page.getByRole('button', { name: 'Start critique · hold a spot' }).click();
   await expect(page.getByText('Your critique spot is held', { exact: true })).toBeVisible();
 
   const firstParagraph = page.locator('.reader-manuscript .reader-text p').first();
@@ -162,7 +161,7 @@ test('a line comment appears as an inline chip and the manuscript continues afte
   expect(mobileWidths.body).toBeLessThanOrEqual(mobileWidths.viewport);
   expect(mobileWidths.navigation).toBeLessThanOrEqual(mobileWidths.navigationViewport);
   await page.getByRole('button', { name: 'Release spot', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Start critique · hold a spot' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reserve a spot · 30 minutes' })).toBeVisible();
   await expect(chip).toHaveText('This opening image lands.');
   expect(failures).toEqual([]);
 });

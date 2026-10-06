@@ -4,22 +4,25 @@ import { Clock, LoaderCircle, ShieldCheck } from 'lucide-react';
 import { Button } from './ui/button';
 
 type Reservation = { serverNow: number; reservable: boolean; available: number; holds: number; mine: { workId: string; title: string; startedAt: number; expiresAt: number } | null };
-export function useCritiqueReservation(workId: string, enabled: boolean, revision?: number) {
+export function useCritiqueReservation(workId: string, enabled: boolean, revision?: number, version=1) {
   const [state, setState] = useState<Reservation | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(0);
-  const offset = useRef(0), activity = useRef(0), renewed = useRef(0), current = useRef<Reservation | null>(null), inFlight = useRef(false);
-  const accept = useCallback((data: Reservation) => { offset.current = data.serverNow - Date.now(); current.current = data; setState(data); setNow(data.serverNow); }, []);
+  const [lastHold,setLastHold] = useState({key:'',expiresAt:0});
+  const holdKey=workId+':'+version;
+  const lastExpiry=lastHold.key===holdKey?lastHold.expiresAt:0;
+  const offset = useRef(0), attempted = useRef(''), inFlight = useRef(false);
+  const accept = useCallback((data: Reservation) => { offset.current = data.serverNow - Date.now(); setState(data); setNow(data.serverNow); if(data.mine?.workId===workId)setLastHold({key:workId+':'+version,expiresAt:data.mine.expiresAt}); }, [workId,version]);
   const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
       const response = await fetch('/api/workshop?collection=critiqueReservation&id=' + encodeURIComponent(workId), { cache: 'no-store', signal });
       const data = await response.json() as Reservation & { error?: string };
       if (!response.ok) throw new Error(data.error || 'Could not check critique spots.');
-      if (!signal?.aborted) { accept(data); setError(''); }
+      if (!signal?.aborted) { accept(data); setError(''); return data; }
     } catch (error) { if (!signal?.aborted) setError((error as Error).message); }
   }, [workId, accept]);
-  const change = useCallback(async (action: 'reserveCritique' | 'renewCritique' | 'releaseCritique', target = workId) => {
+  const change = useCallback(async (action: 'reserveCritique' | 'releaseCritique', target = workId) => {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError('');
     try {
@@ -27,48 +30,59 @@ export function useCritiqueReservation(workId: string, enabled: boolean, revisio
       const data = await response.json() as Reservation & { error?: string };
       if (!response.ok) throw new Error(data.error || 'Could not update your spot.');
       if (target === workId) accept(data); else await refresh();
-      if (action !== 'releaseCritique') renewed.current = Date.now();
+      if (action === 'releaseCritique' && target===workId) setLastHold({key:workId+':'+version,expiresAt:0});
     } catch (error) { setError((error as Error).message); }
     finally { setBusy(false); inFlight.current = false; }
-  }, [workId, accept, refresh]);
+  }, [workId, version, accept, refresh]);
+  useEffect(()=>{
+    if(!enabled||!lastExpiry)return;
+    const controller=new AbortController();
+    const timer=setTimeout(()=>{setNow(Date.now()+offset.current);void refresh(controller.signal);},Math.max(0,lastExpiry-Date.now()-offset.current));
+    return ()=>{controller.abort();clearTimeout(timer);};
+  },[enabled,lastExpiry,refresh]);
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Load the external server reservation when the manuscript changes.
-    void refresh(controller.signal);
+    const key=workId+':'+version;
+    const start=async()=>{
+      const data=await refresh(controller.signal);
+      if(!data||controller.signal.aborted||attempted.current===key)return;
+      attempted.current=key;
+      if(data.reservable&&!data.mine&&data.available>0)await change('reserveCritique');
+    };
+    // Starting a critique acquires a server reservation once; polling never reacquires it.
+    void start();
+    const clock = setInterval(() => setNow(Date.now() + offset.current), 1000);
     const timer = setInterval(() => {
-      setNow(Date.now() + offset.current);
       if (document.hidden) return;
-      const hold = current.current?.mine;
-      if (hold?.workId === workId && hold.expiresAt > Date.now() + offset.current && activity.current > renewed.current && Date.now() - renewed.current >= 60_000) void change('renewCritique');
-      else void refresh(controller.signal);
+      void refresh(controller.signal);
     }, 30_000);
     const visible = () => { if (!document.hidden) void refresh(controller.signal); };
     document.addEventListener('visibilitychange', visible);
-    return () => { controller.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', visible); };
-  }, [enabled, workId, revision, refresh, change]);
-  return { state, error, busy, now, change, retry: () => void refresh(), markActive: () => { activity.current = Date.now(); } };
+    return () => { controller.abort(); clearInterval(clock); clearInterval(timer); document.removeEventListener('visibilitychange', visible); };
+  }, [enabled, workId, version, revision, refresh, change]);
+  return { state, error, busy, now, change, retry: () => void refresh(), expired:lastExpiry>0&&lastExpiry<=now };
 }
 
 export function CritiqueReservation({ reservation, workId }: { reservation: ReturnType<typeof useCritiqueReservation>; workId: string }) {
-  const { state, error, busy, now, change, retry } = reservation;
+  const { state, error, busy, now, change, retry, expired } = reservation;
   const mine = state?.mine;
   const held = mine?.workId === workId && mine.expiresAt > now;
   return <section className={'critique-reservation' + (held ? ' held' : '')} aria-label="Critique spot">
-    <div className="reservation-heading">{held ? <ShieldCheck size={19}/> : <Clock size={19}/>}<strong>{held ? 'Your critique spot is held' : 'Take your time with this critique'}</strong></div>
+    <div className="reservation-heading">{held ? <ShieldCheck size={19}/> : <Clock size={19}/>}<strong>{held ? 'Your critique spot is held' : expired ? 'Your reservation has expired' : 'Critique spot availability'}</strong></div>
     {state ? <>
-      {held ? <p><b>{Math.max(1, Math.ceil((mine.expiresAt - now) / 60_000))} minutes left.</b> Active writing extends your hold, up to 90 minutes from when you started. An idle or closed tab does not renew it.</p>
+      {held ? <p><b>{Math.max(1, Math.ceil((mine.expiresAt - now) / 60_000))} minutes left.</b> Starting this critique reserved a spot for 30 minutes. It expires even while you are writing.</p>
         : mine && mine.workId !== workId ? <p>You hold a spot on “{mine.title}”. You can hold one spot at a time.</p>
-          : state.reservable ? <p>{state.available > 0 ? `${state.available} requested ${state.available === 1 ? 'spot is' : 'spots are'} available. Start a 30-minute hold before you write so another reader cannot take the last spot.` : 'All requested spots are temporarily held by other readers. You can keep reading and drafting; check back for an opening.'}</p>
-            : <p>This work has received its requested feedback. Additional critiques are still welcome at the regular outside-reading-room reward rate.</p>}
+          : state.reservable ? <p>{expired?'Your draft is safe. ':''}{state.available > 0 ? `${state.available} requested ${state.available === 1 ? 'spot is' : 'spots are'} available. You can reserve ${expired?'again ':''}for another 30 minutes.` : 'All requested spots are temporarily held by other readers. You can keep reading and drafting; check back for an opening.'}</p>
+            : <p>This work is not available for reservations in the reading room. You can still leave feedback.</p>}
       <div className="reservation-actions">
         {held ? <Button type="button" variant="outline" disabled={busy} onClick={() => void change('releaseCritique')}>Release spot</Button>
           : mine && mine.workId !== workId ? <Button type="button" variant="outline" disabled={busy} onClick={() => void change('releaseCritique', mine.workId)}>Release other spot</Button>
-            : state.reservable && <Button type="button" className="primary-button" disabled={busy || !state.available} onClick={() => void change('reserveCritique')}>{busy && <LoaderCircle size={14} className="animate-spin"/>}Start critique · hold a spot</Button>}
+            : state.reservable && <Button type="button" variant="outline" disabled={busy || !state.available} onClick={() => void change('reserveCritique')}>{busy && <LoaderCircle size={14} className="animate-spin"/>}{expired?'Reserve again':'Reserve a spot'} · 30 minutes</Button>}
         <Button type="button" variant="ghost" disabled={busy} onClick={retry}>Refresh spots</Button>
       </div>
     </> : !error && <p role="status">Checking available spots…</p>}
-    <p className="fine-print">A hold is optional. Expiry or release never deletes your critique draft. Availability and credits are checked again when you submit.</p>
+    <p className="fine-print">Expiry or release never deletes your critique draft. Reserving again depends on the work still being in the reading room and a spot being available. Availability and credits are checked again when you submit.</p>
     {error && <div className="form-error" role="alert">{error} <button type="button" className="text-link" onClick={retry}>Retry</button></div>}
   </section>;
 }

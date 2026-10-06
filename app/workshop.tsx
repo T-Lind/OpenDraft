@@ -449,7 +449,7 @@ export default function Workshop() {
           {view === 'Story' && (selectedWork ? <StoryPage work={selectedWork} data={readerData} act={act} busy={busy} onCritique={() => go('Read & critique', selectedWork.id)} onAuthor={openAuthor} analytics={data.analytics} onAnalytics={() => go('Analytics')} onChanged={()=>{void load();setRevision(n=>n+1);}} /> : <div className="sheet"><div className="sheet-body">{detail.loading||detail.id!==selected?<p role="status">Loading this work…</p>:<Empty title="This story isn’t available." description={detail.error||'It may have been withdrawn by its writer.'} label="Back to the workshop" action={() => go('Explore')} />}</div></div>)}
 
           {view === 'Read & critique' && (selectedWork
-            ? <Reader key={selectedWork.id} work={selectedWork} data={readerData} act={act} busy={busy} back={() => go('Story', selectedWork.id)} onSignIn={() => setLogin(true)} onAuthor={openAuthor} />
+            ? <Reader key={selectedWork.id+':'+selectedWork.version} work={selectedWork} data={readerData} act={act} busy={busy} back={() => go('Story', selectedWork.id)} onSignIn={() => setLogin(true)} onAuthor={openAuthor} />
             : <div className="sheet"><div className="sheet-body">{detail.loading||detail.id!==selected?<p role="status">Loading this work…</p>:<Empty title="This story isn’t available." description={detail.error||'It may have been withdrawn by its writer.'} label="Back to the workshop" action={() => go('Explore')} />}</div></div>)}
           {reading&&selectedWork&&<><PageMore page={reviewPage} label="More critiques" /><PageMore page={annotationPage} label="More line notes" /></>}
 

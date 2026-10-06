@@ -24,7 +24,9 @@ const circles=[...sampleCircles.map(c=>({...c,ownerId:'system',joined:false})),{
 let failSave=false;
 const readings=[{id:'fixture-reading',circleId:'fixture-circle',workId:'the-last-light',title:sampleWorks[0].title,author:sampleWorks[0].author,genre:sampleWorks[0].genre,words:sampleWorks[0].words,addedBy:user.id,createdAt:Date.now()}];
 let hold=null;
-const reservation=id=>({serverNow:Date.now(),reservable:['spotlight','queued'].includes(works.find(w=>w.id===id)?.status),available:hold?.workId===id&&hold.expiresAt>Date.now()?1:2,holds:hold?.workId===id&&hold.expiresAt>Date.now()?1:0,mine:hold&&hold.expiresAt>Date.now()?hold:null});
+let reservationClockOffset=0;
+const reservationNow=()=>Date.now()+reservationClockOffset;
+const reservation=id=>({serverNow:reservationNow(),reservable:works.find(w=>w.id===id)?.status==='spotlight',available:hold?.workId===id&&hold.expiresAt>reservationNow()?1:2,holds:hold?.workId===id&&hold.expiresAt>reservationNow()?1:0,mine:hold&&hold.expiresAt>reservationNow()?hold:null});
 const friends=[{id:'friend-maya',userId:'maya',name:'Maya Chen',status:'pending',incoming:true}];const blocks=new Set();let friendsOnly=false;const ratings={};let cases=[];let legal=[];let audit=[];
 const reviews=[{id:'critique-troy',workId:'revision-source',userId:'troy',author:'Troy Janus',overall:'The morning image works well. The final sentence could make the relationship more specific.',strengths:'The restrained voice makes space for the image.',suggestions:'Try a concrete gesture to connect the empty chair to the narrator.',annotation:'',quote:'',version:1,reward:1,helpful:0,createdAt:Date.now()-86400000}];
 const messages=[
@@ -39,6 +41,7 @@ const paged=(items,params)=>{const start=Number(params.get('cursor')||0),size=Nu
 createServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1:5182'),params=url.searchParams;const send=(data,status=200)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
  if(req.method==='POST'){
+  if(url.pathname==='/__fixture/expire-hold'){reservationClockOffset+=31*60000;send({ok:true});return;}
   if(url.pathname==='/__fixture/fail-save'){failSave=true;send({ok:true});return;}
   let raw='';for await(const chunk of req)raw+=chunk;const body=JSON.parse(raw);
   if(url.pathname==='/api/community'){
@@ -68,7 +71,7 @@ createServer(async(req,res)=>{
   if(body.action==='review'){const w=works.find(w=>w.id===body.review.workId),id='pilot-review-'+Date.now();const count=inspectCritique(w.content,body.review).words,reward=count<175||!previewAssessment(body.review).credit.eligible?0:Math.round((w.status==='spotlight'?1:0.5)*(1+(count-175)*0.005)*1000)/1000;const {engagement,...reviewBody}=body.review;const review={...reviewBody,reward,id,userId:user.id,author:user.name,createdAt:Date.now(),version:w.version};user.credits+=reward;reviews.push(review);w.hasReviewed=true;w.reviews++;if(engagement)pilot.unshift({id,author:user.name,workId:w.id,title:w.title,createdAt:review.createdAt,evidence:JSON.stringify({engagement,quality:inspectCritique(w.content,body.review)})});}
   if(body.action==='addCircleReading'){const w=works.find(w=>w.id===body.workId);readings.push({id:'reading-'+Date.now(),circleId:body.circleId,workId:w.id,title:w.title,author:w.author,genre:w.genre,words:w.words,addedBy:user.id,createdAt:Date.now()});}
   if(body.action==='removeCircleReading'){const i=readings.findIndex(r=>r.id===body.readingId);if(i>=0)readings.splice(i,1);}
-  if(['reserveCritique','renewCritique','releaseCritique'].includes(body.action)){if(body.action==='reserveCritique')hold={workId:body.workId,title:works.find(w=>w.id===body.workId).title,startedAt:Date.now(),expiresAt:Date.now()+30*60000};if(body.action==='renewCritique'&&hold)hold.expiresAt=Math.min(hold.startedAt+90*60000,Date.now()+30*60000);if(body.action==='releaseCritique')hold=null;send(reservation(body.workId));return;}
+  if(['reserveCritique','renewCritique','releaseCritique'].includes(body.action)){if(body.action==='renewCritique'){send({error:'Reservations expire after 30 minutes.'},409);return;}if(body.action==='reserveCritique'){if(works.find(w=>w.id===body.workId)?.status!=='spotlight'){send({error:'This work is not in the reading room.'},409);return;}if(!hold||hold.expiresAt<=reservationNow())hold={workId:body.workId,title:works.find(w=>w.id===body.workId).title,startedAt:reservationNow(),expiresAt:reservationNow()+30*60000};else if(hold.workId!==body.workId){send({error:'Release your other spot first.'},409);return;}}if(body.action==='releaseCritique')hold=null;send(reservation(body.workId));return;}
   if(body.action==='readMessage'){messages.filter(m=>m.recipientId===user.id&&m.senderId===body.userId).forEach(m=>m.readAt=Date.now());if(body.quiet){send({unreadMessages:unread()});return;}}
   if(body.action==='sendMessage'){messages.push({id:'sent-'+Date.now(),senderId:user.id,sender:user.name,recipientId:body.recipientId,recipient:body.recipientId==='troy'?'Troy Janus':'Maya Chen',name:body.recipientId==='troy'?'Troy Janus':'Maya Chen',conversationId:body.recipientId,body:body.body,kind:'direct',createdAt:Date.now(),readAt:null});}
   if(['saveDraft','autosaveDraft','publish'].includes(body.action)){

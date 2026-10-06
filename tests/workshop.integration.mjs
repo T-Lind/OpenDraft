@@ -445,7 +445,7 @@ try{
  const ownedCircle=(await query("SELECT id FROM circles WHERE owner_id='deleted-member'")).rows[0].id;
  await action('deleted-member',{action:'updateWorkshop',circleId:ownedCircle,workshopPrompt:'A departing member’s prompt',workshopAgenda:'A personal session agenda',meetingPlace:'A personal meeting location',meetingAt:Date.now()+86400000,feedbackDueAt:0});
  await action('deleted-member',{action:'addCircleReading',circleId:ownedCircle,workId:'delete-manuscript'});
- await query("INSERT INTO works(id,author_id,author,title,genre,kind,stage,content,request,status,version,created_at,words,target_reviews) SELECT 'delete-reservation-target','alice','Alice','Delete reservation target',genre,kind,stage,content,request,'queued',1,$1,words,2 FROM works WHERE id='the-last-light'",[Date.now()]);
+ await query("INSERT INTO works(id,author_id,author,title,genre,kind,stage,content,request,status,version,created_at,words,target_reviews) SELECT 'delete-reservation-target','alice','Alice','Delete reservation target',genre,kind,stage,content,request,'spotlight',1,$1,words,2 FROM works WHERE id='the-last-light'",[Date.now()]);
  ok((await action('deleted-member',{action:'reserveCritique',workId:'delete-reservation-target'})).status===200,'deletion fixture holds a critique spot');
  await cAction('friend-a',{action:'block',id:'deleted-member'});
  ok((await cAction('deleted-member',{action:'deleteAccount',confirmation:'delete'})).status===400,'deletion requires exact explicit confirmation');
@@ -504,11 +504,14 @@ try{
  const swoop={...fullCritique('reservation-fixture'),review:{...fullCritique('reservation-fixture').review,annotations:[{kind:'comment',quote:'',body:'Attempted swoop note',para:0,start:0,end:0}]}};
  ok((await action(loser,swoop)).status===409,'unreserved submission cannot take a held final spot');
  ok((await query("SELECT COUNT(*)::int AS n FROM reviews WHERE work_id='reservation-fixture'")).rows[0].n===0,'rejected swoop creates no critique or reward');
- await query('UPDATE critique_reservations SET started_at=$1 WHERE user_id=$2',[Date.now()-85*60000,holder]);
- const renewedHold=(await action(holder,{action:'renewCritique',workId:'reservation-fixture'})).data.mine;
- ok(renewedHold.expiresAt===renewedHold.startedAt+90*60000,'active renewal cannot exceed the ninety-minute cap');
+ ok((await action(holder,{action:'renewCritique',workId:'reservation-fixture'})).status===409,'legacy active renewal is rejected so a thirty-minute hold cannot extend');
+ const repeatedHold=(await action(holder,{action:'reserveCritique',workId:'reservation-fixture'})).data.mine;
+ ok(repeatedHold.expiresAt===held.mine.expiresAt,'repeated acquisition cannot extend a live reservation');
  await query('UPDATE critique_reservations SET expires_at=$1 WHERE user_id=$2',[Date.now()-1,holder]);
- ok((await action(holder,{action:'renewCritique',workId:'reservation-fixture'})).data.mine===null,'renewal cannot resurrect an expired spot');
+ ok((await action(holder,{action:'renewCritique',workId:'reservation-fixture'})).status===409,'legacy renewal cannot resurrect an expired spot');
+ const reservedAgain=(await action(holder,{action:'reserveCritique',workId:'reservation-fixture'})).data.mine;
+ ok(reservedAgain.startedAt>held.mine.startedAt&&reservedAgain.expiresAt-reservedAgain.startedAt===30*60000,'expired reservation can be explicitly reacquired for a fresh thirty minutes in the reading room');
+ await query('UPDATE critique_reservations SET expires_at=$1 WHERE user_id=$2',[Date.now()-1,holder]);
  ok((await action(loser,{action:'reserveCritique',workId:'reservation-fixture'})).status===200,'expired spot is available to another reader');
  ok((await action(loser,{action:'releaseCritique',workId:'reservation-fixture'})).data.mine===null,'reviewer can explicitly release a spot');
  ok((await action(holder,{action:'reserveCritique',workId:'reservation-fixture'})).status===200,'a released spot can be claimed again');
