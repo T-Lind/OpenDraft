@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdirSync} from 'node:fs';
+mkdirSync('.sites-runtime/tests',{recursive:true});
+await build({entryPoints:['lib/critique-quality.ts'],outfile:'.sites-runtime/tests/quality.mjs',bundle:true,format:'esm',platform:'node',packages:'external'});
+const {engagementTick,engagementInput,inspectCritique,manuscriptParagraphs,validQualityNote}=await import('../.sites-runtime/tests/quality.mjs');
+const blank=()=>({consent:true,version:1,activeMs:0,readingMs:0,regionsMs:Array(12).fill(0)});
+let state=blank();
+for(const [visible,focused,idle,elapsed] of [[false,true,0,1000],[true,false,0,1000],[true,true,61000,1000],[true,true,0,300000]]) {
+ assert.deepEqual(engagementTick(state,elapsed,visible,focused,idle,[0,1]),state,'hidden, unfocused, idle, and suspended intervals cannot inflate attention');
+}
+state=engagementTick(state,1000,true,true,0,[0,0,1,100]);
+assert.equal(state.readingMs,1000);assert.equal(state.regionsMs[0],1000,'multiple visible paragraphs in one region cannot double-count');
+state=engagementTick(state,1000,true,true,0,[]);
+assert.equal(state.activeMs,2000);assert.equal(state.readingMs,1000,'editing below the manuscript is not reading time');
+assert.equal(engagementInput.safeParse({...state,consent:false}).success,false);
+assert.equal(engagementInput.safeParse({...state,readingMs:3000}).success,false);
+assert.equal(engagementInput.safeParse({...state,regionsMs:Array(12).fill(5000)}).success,false);
+const content='**First** quiet scene.\n\n\n\nSecond sudden scene.\n\nLast clear scene.';
+const paragraphs=manuscriptParagraphs(content);
+assert.equal(paragraphs.length,4,'empty paragraphs preserve reader anchor indices');
+const note=(para,quote,kind='comment',body='This concrete detail builds a clear emotional contrast.')=>({para,quote,kind,body,start:0,end:quote.length});
+assert.equal(validQualityNote(note(0,'First'),paragraphs),true,'formatted passages use rendered text offsets');
+assert.equal(validQualityNote(note(2,'Last'),paragraphs),false,'an incorrect quote cannot imply distributed reading');
+const draft={overall:'The final image gives the narrator a clear choice. The final image gives the narrator a clear choice.',strengths:'',suggestions:'',annotations:[note(0,'First'),note(2,'Second'),note(3,'Last'),note(3,'Last','delete','')]};
+const quality=inspectCritique(content,draft);
+assert.deepEqual(quality.distribution,[1,1,2]);assert.equal(quality.repeatedSentences,3);
+assert.ok(quality.prompts.some(p=>p.includes('Explain why')));
+assert.ok(!('score' in quality),'deterministic signals do not pretend to be a quality grade');
+assert.ok(inspectCritique(content,{overall:'Strong ending.',strengths:'',suggestions:'',annotations:[]}).prompts.some(p=>p.includes('just as useful')),'short overall critiques do not require inline comments');
+console.log('Critique signal boundaries passed: idle/background/suspension, consent validation, exact anchoring, repetition, and no automatic score.');

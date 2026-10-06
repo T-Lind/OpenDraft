@@ -1,7 +1,8 @@
 import { getSessionUser } from '@/lib/auth';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import type { Database } from '@/db/storage';
-export const TERMS_VERSION='2026-10-03';
+import {TERMS_VERSION} from './workshop-policy';
+export {TERMS_VERSION} from './workshop-policy';
 export function fail(message:string,status=400):never{throw Object.assign(new Error(message),{status});}
 export async function member(db:Database,provision=false){
  const session=await getSessionUser();const legacy=session?null:await getChatGPTUser();

@@ -1,11 +1,13 @@
+import {queueForecasts} from './queue-forecast';
 import type { Database } from '@/db/storage';
 import { cursorFor, limitFor, pageOf, readCursor } from './pagination';
 import { reservationStatus } from './critique-reservations';
 import { circleProjection } from './circle-access';
+import { TERMS_VERSION } from './workshop-policy';
 
 export type Row = Record<string, unknown>;
 export const camel = (row: Row): Row => Object.fromEntries(Object.entries(row).map(([key,value])=>[key.replace(/_([a-z])/g,(_,letter)=>letter.toUpperCase()),value]));
-export const workColumns = `w.id,w.author_id,w.author,w.title,w.genre,w.kind,w.stage,w.request,w.status,w.version,w.created_at,w.words,w.warning,w.mature,w.themes,w.target_reviews,w.critique_visibility,w.revision_of,w.showcase_opt_in,w.ai_showcase_consent,w.ai_process`;
+export const workColumns = `w.id,w.author_id,w.author,w.title,w.genre,w.kind,w.stage,w.request,w.status,w.version,w.created_at,w.words,w.warning,w.mature,w.themes,w.target_reviews,w.critique_visibility,w.revision_of,w.showcase_opt_in,w.ai_showcase_consent,w.ai_process,(w.author_id LIKE 'sample-%' OR EXISTS(SELECT 1 FROM profiles jp WHERE jp.id=w.author_id AND jp.deleted_at=0 AND jp.terms_version='${TERMS_VERSION}')) AS jev_review_available`;
 export const publicWork = "w.status NOT IN ('draft','withdrawn')";
 export const workExtras = `(SELECT COUNT(*) FROM reviews r WHERE r.work_id=w.id AND r.version=w.version)::int AS reviews,
  EXISTS(SELECT 1 FROM bookmarks b WHERE b.work_id=w.id AND b.user_id=?) AS bookmarked,
@@ -32,7 +34,7 @@ export async function queryCollection(db: Database, uid: string, params: URLSear
  if(collection==='work') {
   const work=await db.prepare(`SELECT ${workColumns},w.content,${workExtras} FROM works w WHERE w.id=? AND (${publicWork} OR w.author_id=?)`).bind(uid,uid,id,uid).first();
   if(!work) throw Object.assign(new Error('This work is unavailable.'),{status:404});
-  return {work:camel(work)};
+  return {work:(await queueForecasts(db,[camel(work)]))[0]};
  }
  if(collection==='works') {
   const mode=params.get('mode')||'explore';
@@ -55,7 +57,7 @@ export async function queryCollection(db: Database, uid: string, params: URLSear
   if(cursor){boundary=recommended?` WHERE (${tier}>? OR (${tier}=? AND (created_at,id)<(?,?)))`:` WHERE (${key},id)${op}(?,?)`; if(recommended)values.push(cursor.rank??0,cursor.rank??0,cursor.value,cursor.id);else values.push(cursor.value,cursor.id);}
   rows=(await db.prepare(`WITH listing AS (SELECT ${workColumns},''::text AS content,${workExtras} FROM works w WHERE ${where.join(' AND ')}) SELECT * FROM listing${boundary} ORDER BY ${recommended?tier+' ASC,':''}${key} ${direction},id ${direction} LIMIT ?`).bind(uid,uid,...values,limit+1).all()).results;
   const items=rows.slice(0,limit);const last=items.at(-1);
-  return {items:items.map(camel),nextCursor:rows.length>limit&&last?cursorFor(Number(last[key]),String(last.id),recommended?last.status==='spotlight'?0:last.status==='queued'?1:2:undefined):null};
+  return {items:await queueForecasts(db,items.map(camel)),nextCursor:rows.length>limit&&last?cursorFor(Number(last[key]),String(last.id),recommended?last.status==='spotlight'?0:last.status==='queued'?1:2:undefined):null};
  }
  if(collection==='reviews') {
   const mode=params.get('mode')||'given';

@@ -4,6 +4,16 @@
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 
+.review-quality { margin: 14px 0; padding: 16px; border: 1px solid var(--rule); border-radius: 12px; }
+.review-quality summary { cursor: pointer; font-weight: 600; }
+.review-quality p { margin: 10px 0; }
+.review-quality ul { padding-left: 20px; font-size: 14px; line-height: 1.6; }
+.review-quality .check-row { margin: 12px 0; }
+.review-region-map { display: grid; grid-template-columns: repeat(12,minmax(0,1fr)); gap: 4px; max-width: 420px; }
+.review-region-map > span { height: 22px; border-radius: 3px; background: var(--page); border: 1px solid var(--rule); }
+.review-region-map > span.glimpsed { background: #f4c9a3; }
+.review-region-map > span.observed { background: #3b7768; }
+
 .onboarding-shell { min-height: 100vh; padding: 24px; background: var(--page); color: var(--ink); }
 .onboarding-top { max-width: 940px; margin: 0 auto 42px; display: flex; align-items: center; justify-content: space-between; }
 .onboarding-top a { color: var(--link); font-size: 13px; }
@@ -2557,4 +2567,23 @@ html[data-reduce-motion="true"] *, html[data-reduce-motion="true"] *::before, ht
   html[data-keyboard-open="true"] .mobile-nav { display: none; }
   html[data-keyboard-open="true"] .editor-form > .form-actions { position: static; }
   html[data-keyboard-open="true"] .annotate-pop { bottom: calc(var(--keyboard-inset) + 8px); }
+}
+
+.critique-checks{padding:12px 0;border-top:1px solid var(--border)}
+.critique-score-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.critique-score-grid>div{display:flex;flex-direction:column;gap:3px}
+.critique-score-grid span{font-size:11px;color:var(--muted-foreground)}
+.critique-score-grid strong{font-size:18px;font-variant-numeric:tabular-nums}
+.critique-score-grid small{font-size:11px;font-weight:400;color:var(--muted-foreground)}
+.critique-checks p{margin:8px 0 0;font-size:11px}
+.critique-structure{color:var(--muted-foreground)}
+.queue-progress{display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:12px;color:var(--muted-foreground)}
+.queue-progress>span:first-child{font-weight:600;color:var(--foreground)}
+.queue-progress small{font-size:11px}
+@media(max-width:600px){
+ .writing-row{display:grid;grid-template-columns:1fr;gap:10px}
+ .writing-icon{display:none}
+ .writing-main{width:100%}
+ .writing-actions{flex-direction:row;flex-wrap:wrap;justify-content:flex-start;gap:10px 14px}
+ .writing-row h2{overflow-wrap:anywhere}
 }

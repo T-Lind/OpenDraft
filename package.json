@@ -15,7 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/auth.integration.mjs && node tests/avatar-history.test.mjs && node tests/workshop.integration.mjs",
+    "test": "node tests/queue-forecast.test.mjs && node tests/queue-postgres.test.mjs && node tests/critique-quality.test.mjs && node tests/critique-check.test.mjs && node tests/critique-credit.test.mjs && node tests/auth.integration.mjs && node tests/avatar-history.test.mjs && node tests/workshop.integration.mjs",
     "test:auth": "node tests/auth.integration.mjs",
     "test:e2e": "playwright test"
   },

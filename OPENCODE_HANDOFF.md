@@ -1,6 +1,59 @@
+# Current workshop policy (October 6, 2026)
+
+Jev processing is authorized by the current workshop terms, accepted once by writer and reviewer. Critique checks run after 5 seconds without edits, no more than once per 30 seconds. Four 0–4 categories are always visible; changed feedback clears old scores. The v2 rubric uses dimension-specific criteria. New earning critiques require at least 175 words, a fresh server Jev average strictly above 2/4, and grounding/usefulness each at least 2/4. Raw scores determine eligibility; client scores never do. Low-scoring feedback shares without credits; provider failure preserves the draft for retry. Migration 0019 stores private final credit decisions and text fingerprints, exported to the reviewer and deleted with either participant. Prior credit balances are unchanged. No per-work or per-check Jev consent controls remain. Critiques must be human-written; there is no AI process selector. Optional reading telemetry remains a separate voluntary pilot and never affects rewards.
+
+Queued works show a database-derived genre queue position and a broad estimate until all requested critiques. Migration 0018 records actual queue-to-room and room-to-completed transitions, excludes examples and administrative status changes without completed feedback, and starts a real observation window. Forecasts require at least a day of observation and three recent events at each stage; otherwise the UI says an estimate is unavailable. The previous notes below describe earlier iterations where they conflict with this section. Migrations 0017/0018/0019 have not been applied to the live database.
+
+V2 live calibration covered 116 synthetic examples on 17 works, plus ten selected cases repeated three times. Final eligibility matched all 111 supplied quality expectations and repeated decisions were stable. This is development/regression evidence, not held-out accuracy: the corpus informed a correction for useful feedback buried in filler. `tests/fixtures/critique-eval-broad-results.json` records raw scores, comparisons, limitations, rubric snapshots, source hashes and reproduction commands. Automated financial tests mock only the workshop route's model call and exercise the production credit policy and PostgreSQL transaction. Live evaluation never submits member critiques or mutates balances.
+
+Verification for the credit gate: 381 full PostgreSQL integration assertions and 25 focused financial assertions passed. TypeScript, full/focused lint, production vinext build, queue suites, critique timing/policy/provider/rendered UI suites, 35 authentication assertions, and 33 avatar/history assertions passed. The isolated preview was refreshed on port 5182; its boundary-score and outage API checks passed without changing fixture balance/reviews. GPT-6 Luna opened the preview but browser automation lost its connection before interactions, so this pass's interactive browser verification is incomplete. No live schema migration or deployment was performed.
+
 # OpenCode handoff — OpenDraft
 
 Date: 2026-10-04
+
+## Local review quality pilot — October 6, 2026
+
+Additive migration `0017_loving_jasper_sitwell` adds `critique_evidence` and
+`works.ai_critique_consent` (off by default). It has not been applied to the live
+Neon schema and this code has not been deployed. The in-memory platform preview
+on port 5182 includes simulated Jev scores and private operator summaries.
+
+Reviewers explicitly start session-only telemetry: focused active time,
+manuscript-visible time, and twelve coarse word-region dwell counters. Hidden,
+unfocused, idle (>60s), and suspended (>2.5s interval) time is excluded. These are
+untrusted observations, not evidence of reading completion. Stop/discard removes
+the summary; only opted-in critique submission stores it atomically with a
+server-derived deterministic structure check. It is isolated from public review
+queries and recipient exports, available to the operator in a paginated pilot
+list and in the reviewer export. Either participant's account deletion removes it.
+
+Browser structure checks include exact repeated sentences, text-validated anchors
+distributed by word position, and rudimentary redline rationale hints. No automatic
+quality score, rewards change, or punishment is enabled. A short global critique
+and focused comments remain valid. Future reward decisions need a calibrated rubric,
+human review, reviewer explanation/appeal, and protection against genre/accessibility
+bias. Prefer revision opportunity, then withholding only a confirmed unearned reward;
+repeated confirmed abuse could justify temporary earning restrictions.
+
+Optional Jev checks require new writer permission for each published work, separate
+from showcase consent, plus fresh reviewer consent for each request. The server
+loads the permitted manuscript, validates version and anchors, and sends only it,
+the writer request, critique, and line notes to existing TypeSafe-only/no-training
+Gateway routing. Fixed 0–4 rubric: grounding, relevance, rationale, usefulness.
+Provider failures and invalid scores leave critique submission available; rate
+limits are 5/member/day and 25 globally/day. Results are composer-only and invalidate
+on edits, without being persisted as moderation evidence. New revisions start off.
+
+Verification: TypeScript and full lint passed, Next production build passed,
+348 isolated PostgreSQL assertions passed (including pilot opt-in, admin-only
+access, reviewer/recipient export separation, unchanged rewards, and deletion).
+Focused timing and server-boundary suites additionally cover hidden/idle/suspended
+tabs, text anchors, two-party consent, profile-field rejection, and provider errors.
+GPT-6 Luna verified recording/discard, repetition hints, simulated Jev result
+invalidation, inline comments, private operator summary, zero-credit short feedback,
+and desktop/390px layout without console errors. No real Jev accuracy or hardware
+mobile-device coverage is claimed. The preview uses visibly labeled simulated scores.
 
 ## Current pass: approval-only circles, portable settings, and human safety review
 

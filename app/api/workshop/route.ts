@@ -1,3 +1,4 @@
+import {queueForecasts} from '@/lib/queue-forecast';
 import { database, type Database } from '@/db/storage';
 import { readEnv, googleConfigured } from '@/lib/auth';
 import { sampleWorks, sampleCircles, genres, wordCount, workKinds, acceptedWritingProcessValues } from '@/app/data';
@@ -11,8 +12,12 @@ import { promoteSQL } from '@/lib/reading-room';
 import {emailPasswordConfigured} from '@/lib/password-auth';
 import { changeReservation, availableCritiqueSlot } from '@/lib/critique-reservations';
 import { circleProjection, changeCircleMembership, manageCircle } from '@/lib/circle-access';
+import { engagementInput,inspectCritique,manuscriptParagraphs,validQualityNote } from '@/lib/critique-quality';
+import {evaluateCritique} from '@/lib/jev';
+import {MIN_CRITIQUE_WORDS,CRITIQUE_CREDIT_RULE,critiqueState} from '@/lib/critique-rubric';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 
@@ -119,7 +124,7 @@ async function snapshot(db: Database, uid: string) {
   const analytics = uid ? buildAnalytics(total, r[9].results, r[10].results, r[11].results) : null;
   return {
     user,
-    works: r[1].results.map(camel),
+    works: await queueForecasts(db,r[1].results.map(camel)),
     reviews: r[2].results.map(camel),
     bookmarks: r[3].results.map(x => x.work_id),
     circles: r[4].results.map(camel),
@@ -166,15 +171,17 @@ const annotationInput = z.object({
 
 const reviewInput = z.object({
   workId: z.string().max(100),
+  version:z.number().int().positive(),
   strengths: z.string().trim().max(12000).default(''),
   suggestions: z.string().trim().max(12000).default(''),
   overall: z.string().trim().max(12000).default(''),
   quote: z.string().max(4000).default(''),
   annotation: z.string().trim().max(8000).default(''),
   annotations: z.array(annotationInput).max(300).default([]),
-  processDisclosure:z.enum(['human-only','assistive-tools']),
-  attested:z.literal(true),
-});
+  processDisclosure:z.literal('human-only').default('human-only'),
+  attested:z.literal(true).default(true),
+  engagement:engagementInput.optional(),
+}).strict();
 
 function bad(message: string, status = 400): never {
   throw Object.assign(new Error(message), { status });
@@ -259,25 +266,48 @@ export async function POST(request: Request) {
       const r = reviewInput.parse(b.review);
       const count = wordCount(r.strengths + ' ' + r.suggestions + ' ' + r.overall + ' ' + r.annotation + ' ' + r.annotations.map(a => a.body).join(' '));
       if (!count) bad('Add some feedback before sharing your critique. Short critiques are welcome.');
-      const w = await db.prepare('SELECT * FROM works WHERE id=?').bind(r.workId).first<{ author_id: string; status: string; version: number; content: string; title: string }>();
+      const w = await db.prepare("SELECT w.*,(w.author_id LIKE 'sample-%' OR EXISTS(SELECT 1 FROM profiles p WHERE p.id=w.author_id AND p.deleted_at=0 AND p.terms_version=?)) AS jev_review_available FROM works w WHERE w.id=?").bind(TERMS_VERSION,r.workId).first<{ author_id: string; status: string; version: number; content: string; request:string;genre:string;kind:string;stage:string;title: string;jev_review_available:boolean }>();
       if (!w || ['draft', 'withdrawn'].includes(w.status)) bad('This work is no longer available.', 404);
       if (w.author_id === uid) bad('You cannot earn credits by critiquing your own work.');
+      if(r.version!==w.version)bad('This work changed. Reopen it before sharing your critique. Your draft is safe.',409);
+      const slot=await db.prepare(`SELECT id FROM works WHERE id=? AND version=? AND ${availableCritiqueSlot}`).bind(r.workId,w.version,Date.now(),uid).first();
+      if(!slot)bad('The remaining requested critique spots are held by other readers, or this work changed. Your draft is safe.',409);
+      const paragraphs=manuscriptParagraphs(w.content);
+      if(r.annotations.some(note=>!validQualityNote(note,paragraphs)))bad('A line note no longer matches this version. Revisit it before sharing.');
+      if(r.engagement&&r.engagement.version!==w.version)bad('This reading summary belongs to a different version. Discard it before sharing.',409);
       if (r.quote && !w.content.includes(r.quote)) bad('The selected passage is no longer in this draft.');
       if (await db.prepare('SELECT id FROM reviews WHERE work_id=? AND user_id=? AND version=?').bind(r.workId, uid, w.version).first()) bad('You have already critiqued this version.', 409);
+      // Composer/client scores never authorize credits. Include legacy passage comments.
+      const draft={overall:r.overall+(r.annotation?'\n\n'+(r.quote?'Selected passage: '+r.quote+'\n':'')+r.annotation:''),strengths:r.strengths,suggestions:r.suggestions,annotations:r.annotations};
+      let assessment:Awaited<ReturnType<typeof evaluateCritique>>|null=null;
+      let fingerprint='';
+      if(count>=MIN_CRITIQUE_WORDS){
+        if(!w.jev_review_available)bad('Credits require a Jev check after the writer accepts the workshop terms. Your critique draft is safe.',403);
+        // Separate final-check budget: composer cadence must not block sharing.
+        await rateLimit(db,'critique-credit-check:'+uid,60,86400000);
+        await rateLimit(db,'critique-credit-check-global',1000,86400000);
+        try{assessment=await evaluateCritique(w.content,w.request,draft,process.env.VERCEL==='1'?request.headers.get('x-vercel-oidc-token'):null,w);}
+        catch{bad('The final Jev credit check is unavailable. Your critique has not been posted and your draft is safe. Please try again.',503);}
+        const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({version:w.version,state:critiqueState(w.content,w.request,draft,w)})));
+        fingerprint=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+      }
+      const submittedAt=Date.now();
       const id = crypto.randomUUID();
       const annotationStatements = r.annotations.map(a => db.prepare('INSERT INTO annotations(id,review_id,work_id,user_id,author,kind,quote,body,para,start_pos,end_pos,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM reviews WHERE id=?)').bind(crypto.randomUUID(), id, r.workId, uid, p.name, a.kind, a.quote, a.body, a.para, a.start, a.end, now,id));
       const critiqueResult = await db.batch([
-        db.prepare(`INSERT INTO reviews(id,work_id,user_id,author,strengths,suggestions,overall,annotation,quote,process_disclosure,attested,version,reward,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,version,CASE WHEN ?<175 THEN 0 ELSE ROUND(((CASE WHEN status='spotlight' THEN 1 ELSE 0.5 END)*(1+(?-175)*0.005))::numeric,3) END,? FROM works WHERE id=? AND version=? AND author_id<>? AND status NOT IN ('draft','withdrawn') AND ${availableCritiqueSlot} RETURNING reward`).bind(id, r.workId, uid, p.name, r.strengths, r.suggestions, r.overall, r.annotation, r.quote,r.processDisclosure,r.attested,count,count,now,r.workId,w.version,uid,now,uid),
+        db.prepare(`INSERT INTO reviews(id,work_id,user_id,author,strengths,suggestions,overall,annotation,quote,process_disclosure,attested,version,reward,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,version,CASE WHEN ?<175 OR NOT ? THEN 0 ELSE ROUND(((CASE WHEN status='spotlight' THEN 1 ELSE 0.5 END)*(1+(?-175)*0.005))::numeric,3) END,? FROM works WHERE id=? AND version=? AND content=? AND request=? AND genre=? AND kind=? AND stage=? AND author_id=? AND author_id<>? AND status NOT IN ('draft','withdrawn') AND ${availableCritiqueSlot} RETURNING reward`).bind(id, r.workId, uid, p.name, r.strengths, r.suggestions, r.overall, r.annotation, r.quote,r.processDisclosure,r.attested,count,assessment?.credit.eligible??false,count,submittedAt,r.workId,w.version,w.content,w.request,w.genre,w.kind,w.stage,w.author_id,uid,submittedAt,uid),
         db.prepare('UPDATE profiles SET credits=credits+COALESCE((SELECT reward FROM reviews WHERE id=?),0) WHERE id=?').bind(id, uid),
         db.prepare('INSERT INTO credit_events(id,user_id,amount,reason,created_at) SELECT ?,?,reward,?,? FROM reviews WHERE id=? AND reward>0').bind(id, uid, 'Critiqued ' + w.title, now, id),
+        ...(assessment?[db.prepare('INSERT INTO critique_credit_checks(id,user_id,assessment,created_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM reviews WHERE id=?)').bind(id,uid,JSON.stringify({...assessment,version:w.version,fingerprint}),submittedAt,id)]:[]),
         ...annotationStatements,
+        ...(r.engagement?[db.prepare('INSERT INTO critique_evidence(id,user_id,evidence,created_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM reviews WHERE id=?)').bind(id,uid,JSON.stringify({engagement:r.engagement,quality:inspectCritique(w.content,{overall:r.overall,strengths:r.strengths,suggestions:r.suggestions,annotations:r.annotations})}),now,id)]:[]),
         db.prepare('DELETE FROM critique_reservations WHERE user_id=? AND work_id=? AND EXISTS(SELECT 1 FROM reviews WHERE id=?)').bind(uid,r.workId,id),
         db.prepare("UPDATE works SET status='open' WHERE status IN ('spotlight','queued') AND (SELECT COUNT(*) FROM reviews r WHERE r.work_id=works.id AND r.version=works.version)>=COALESCE(target_reviews,2)"),
         db.prepare(promoteSQL),
       ]);
       if (!critiqueResult[0].meta.changes) bad('The remaining requested critique spots are held by other readers, or this work changed. Your draft is safe; wait for a spot or try another work.', 409);
       const earned=Number(critiqueResult[0].results[0].reward);
-      actionNotice=earned ? `Critique shared. You earned ${earned.toLocaleString(undefined,{maximumFractionDigits:3})} credits.` : 'Critique shared. Thank you for helping this writer. This shorter critique earned no credits.';
+      actionNotice=earned ? `Critique shared. You earned ${earned.toLocaleString(undefined,{maximumFractionDigits:3})} credits.` : count<MIN_CRITIQUE_WORDS?'Critique shared. Thank you for helping this writer. This shorter critique earned no credits.':`Critique shared without credits. Jev average ${Number(assessment!.credit.mean!.toFixed(4))}/4; grounding ${assessment!.scores.grounding}/4; usefulness ${assessment!.scores.usefulness}/4. ${CRITIQUE_CREDIT_RULE}`;
     } else if(b.action==='annotationResponse'){
       const input=z.object({annotationId:z.string().max(100),status:z.enum(['open','resolved','kept','not-this-draft']),response:z.string().trim().max(500).default('')}).parse(b);
       const changed=await db.prepare('UPDATE annotations a SET writer_status=?,writer_response=? FROM works w WHERE a.id=? AND w.id=a.work_id AND w.author_id=?').bind(input.status,input.response,input.annotationId,uid).run();

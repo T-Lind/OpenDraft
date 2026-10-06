@@ -1,4 +1,8 @@
 import { database, type Database } from '@/db/storage';
+export async function rateLimitCooldown(db:Database,key:string,windowMs:number,now=Date.now()):Promise<void>{
+ const result=await db.prepare(`INSERT INTO rate_limits(key,window_started_at,count) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET window_started_at=excluded.window_started_at,count=1 WHERE rate_limits.window_started_at<=excluded.window_started_at-? RETURNING count`).bind(key,now,windowMs).first();
+ if(!result)throw Object.assign(new Error('Please wait before the next automatic check.'),{status:429,retryAfter:Math.ceil(windowMs/1000)});
+}
 export async function rateLimit(db: Database, key: string, maximum: number, windowMs: number, now = Date.now()): Promise<void> {
   const window = Math.floor(now / windowMs) * windowMs;
   const result = await db.prepare(`INSERT INTO rate_limits(key,window_started_at,count) VALUES(?,?,1)

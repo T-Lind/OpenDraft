@@ -1,5 +1,17 @@
 import {fail} from './member';
 import { matureThemes } from '@/app/data';
+import type { CritiqueDraft } from './critique-quality';
+import {critiqueQuestions,critiqueState,critiqueCategories,critiqueCreditDecision,CRITIQUE_RUBRIC,type CritiqueContext,type CritiqueScores} from './critique-rubric';
+
+export async function evaluateCritique(content:string,request:string,critique:CritiqueDraft,runtimeToken:string|null=null,context:CritiqueContext={}) {
+ const token=(process.env.AI_GATEWAY_API_KEY||runtimeToken||process.env.VERCEL_OIDC_TOKEN)?.trim();
+ if(!token)fail('The optional Jev check is not configured. You can still share your critique.',503);
+ const response=await fetch('https://ai-gateway.vercel.sh/v1/evaluate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},signal:AbortSignal.timeout(15000),body:JSON.stringify({model:'typesafe-ai/jev',state:critiqueState(content,request,critique,context),questions:critiqueQuestions,providerOptions:{gateway:{disallowPromptTraining:true,only:['typesafe-ai']}}})});
+ if(!response.ok)fail('Jev is unavailable. You can still share your critique.',503);
+ const data=await response.json() as {answers?:Record<string,{score?:number}>};
+ const scores=Object.fromEntries(critiqueCategories.map(key=>{const score=data.answers?.[key]?.score;if(typeof score!=='number'||!Number.isFinite(score)||score<0||score>4)fail('Jev returned an invalid assessment. You can still share your critique.',503);return [key,score];})) as CritiqueScores;
+ return {model:'typesafe-ai/jev',rubric:CRITIQUE_RUBRIC,scores,credit:critiqueCreditDecision(scores)};
+}
 
 export async function evaluateContentThemes(content:string,runtimeToken:string|null=null) {
  const token=(process.env.AI_GATEWAY_API_KEY||runtimeToken||process.env.VERCEL_OIDC_TOKEN)?.trim();

@@ -1,4 +1,6 @@
 'use client';
+import {TERMS_VERSION} from '@/lib/workshop-policy';
+import {QueueProgress} from '@/components/queue-progress';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   BookOpen, Feather, LayoutGrid, Sparkles, FileText, MessageSquare, Users, User,
@@ -25,6 +27,7 @@ import { usePagedList,PageMore } from '@/components/paged-list';
 import {AuthDialog} from '@/components/auth-dialog';
 import { ReadingSettings, ReadingAccountBridge, useReadingPreferences, prefersReducedMotion } from '@/components/reading-preferences';
 import { AccountReview } from '@/components/account-review';
+import { CritiquePilotReview } from '@/components/critique-quality';
 
 export type Snapshot = {
   user: { id: string; name: string; bio: string; credits: number; avatarUpdatedAt?: number; termsVersion?:string; friendsOnly?:boolean; onboardingCompleted?: boolean; age?: number | null; sex?: string; location?: string; interests?: string; currentStreak?: number; longestStreak?: number } | null;
@@ -223,7 +226,7 @@ export default function Workshop() {
   };
   const editDraft = async (work: Work,asRevision=false) => {
     try{let full=work;if(!full.content){const response=await fetch('/api/workshop?collection=work&id='+encodeURIComponent(work.id));const result=await response.json() as {work:Work;error?:string};if(!response.ok)throw new Error(result.error);full=result.work;}
-      if(asRevision){const copy={...full,id:crypto.randomUUID(),status:'draft',title:full.title+' (revision)',reviews:0,revisionOf:full.id,version:full.version+1,showcaseOptIn:false,aiShowcaseConsent:false};const response=await fetch('/api/workshop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'autosaveDraft',work:copy,expectedSavedAt:0}),signal:AbortSignal.timeout(20000)});const saved=await response.json() as {savedAt:number;error?:string};if(!response.ok)throw new Error(saved.error);full={...copy,createdAt:saved.savedAt};setRevision(n=>n+1);}
+      if(asRevision){const copy={...full,id:crypto.randomUUID(),status:'draft',title:full.title+' (revision)',reviews:0,revisionOf:full.id,version:full.version+1,showcaseOptIn:false,aiShowcaseConsent:false,jevReviewAvailable:false};const response=await fetch('/api/workshop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'autosaveDraft',work:copy,expectedSavedAt:0}),signal:AbortSignal.timeout(20000)});const saved=await response.json() as {savedAt:number;error?:string};if(!response.ok)throw new Error(saved.error);full={...copy,createdAt:saved.savedAt};setRevision(n=>n+1);}
       setEditor(full);go('Editor');
     }catch(error){setToast((error as Error).message||'This draft could not load.');}
   };
@@ -268,7 +271,6 @@ export default function Workshop() {
   const selectedWork = detail.id===selected?detail.work:null;
   const readerData={...data,revision,reviews:reviewPage.items,annotations:annotationPage.items,works:selectedWork?[selectedWork,...data.works.filter(work=>work.id!==selectedWork.id)]:data.works};
   const readingRoom = data.works.filter(w => w.status === 'spotlight');
-  const queuedWorks = data.works.filter(w => w.status === 'queued');
   const isNav = (v: string) => view === v;
 
   if (loading) {
@@ -287,7 +289,7 @@ export default function Workshop() {
     return <Onboarding user={data.user} act={act} busy={busy} error={toast} onComplete={() => go('Dashboard')} />;
   }
 
-  if(data.user.termsVersion!=='2026-10-03')return <LegalConsent uid={data.user.id} onAccepted={()=>void load()}/>;
+  if(data.user.termsVersion!==TERMS_VERSION)return <LegalConsent uid={data.user.id} onAccepted={()=>void load()}/>;
 
   return (
     <div className="app-shell">
@@ -381,7 +383,7 @@ export default function Workshop() {
                                 <span className="work-thumb"><FileText size={18} /></span>
                                 <div className="work-body">
                                   <button className="work-title" onClick={() => openStory(w.id)}>{w.title || 'Untitled draft'}</button>
-                                  <div className="work-byline"><span className="status-label" style={{ marginRight: 6 }}>{w.status === 'spotlight' ? 'Reading room' : w.status === 'queued' ? 'In queue' : w.status === 'open' ? 'Open for feedback' : 'Private draft'}</span>{w.genre} · {w.words} words · {readingTimeLabel(w.words)} · {w.reviews} critiques</div>
+                                  <div className="work-byline"><span className="status-label" style={{ marginRight: 6 }}>{w.status === 'spotlight' ? 'Reading room' : w.status === 'queued' ? 'In queue' : w.status === 'open' ? 'Open for feedback' : 'Private draft'}</span>{w.genre} · {w.words} words · {readingTimeLabel(w.words)} · {w.reviews} critiques</div><QueueProgress work={w}/>
                                 </div>
                                 <div className="work-stats"><button className="row-action" onClick={() => w.status === 'draft' ? editDraft(w) : openStory(w.id)}>{w.status === 'draft' ? 'Keep writing' : 'Read feedback'}</button></div>
                               </div>
@@ -396,7 +398,7 @@ export default function Workshop() {
                         <span className="section-title tight" style={{ display: 'block' }}>Your critique credits</span>
                         <div className="credit-number">{formatCredits(credits)}<span>credits</span></div>
                         <p className="fine-print">A thoughtful critique goes a long way — for their draft, and for yours.</p>
-                        <div className="credit-rule"><Sparkles size={14} /><span>Earn <strong>1 credit</strong> at 175 words, then <strong>0.5 per extra 100 words</strong>. Shorter critiques are welcome without credits.</span></div>
+                        <div className="credit-rule"><Sparkles size={14} /><span>Eligible critiques earn <strong>1 credit</strong> at 175 words, then <strong>0.5 per extra 100 words</strong>. Jev average must exceed 2/4; grounding and usefulness must each reach 2/4. Shorter critiques are welcome without credits.</span></div>
                         <div className="credit-rule"><Feather size={14} /><span>Share a draft for <strong>5 credits</strong></span></div>
                         <button className="text-link" style={{ marginTop: 10 }} onClick={() => go('Credit history')}>A fair exchange <ChevronRight size={13} /></button>
                       </section>
@@ -476,9 +478,10 @@ export default function Workshop() {
                     <article className="writing-row" key={w.id}>
                       <span className="writing-icon"><FileText size={20} /></span>
                       <div className="writing-main">
-                        <span className={'status-label ' + w.status}>{w.status === 'spotlight' ? `Reading room · ${w.genre}` : w.status === 'queued' ? `In queue · #${w.queuePosition||queuedWorks.filter(x => x.genre === w.genre && (x.createdAt < w.createdAt || (x.createdAt === w.createdAt && x.id < w.id))).length + 1} in ${w.genre}` : w.status === 'open' ? 'Open for feedback' : 'Private draft'}</span>
+                        <span className={'status-label ' + w.status}>{w.status === 'spotlight' ? `Reading room · ${w.genre}` : w.status === 'queued' ? 'In queue' : w.status === 'open' ? 'Open for feedback' : 'Private draft'}</span>
                         <h2>{w.title || 'Untitled draft'}</h2>
                         <p>{w.genre} · {w.words} words · {readingTimeLabel(w.words)} · {w.reviews} critiques</p>
+                        <QueueProgress work={w}/>
                       </div>
                       <div className="writing-actions">
                         <button className="row-action" onClick={() => w.status === 'draft' ? editDraft(w) : openStory(w.id)}><PenLine size={13} />{w.status === 'draft' ? 'Edit & publish' : 'Read feedback'}</button>
@@ -759,6 +762,7 @@ function AdminView({ onOpenStory,onAuthor,requestCounts }: { requestCounts:{case
         </section>
 
         <AccountReview onRead={onOpenStory} onAuthor={onAuthor}/>
+        <CritiquePilotReview onRead={onOpenStory}/>
         <section className="dash-section">
           <h2 className="section-title">Bug reports &amp; feature requests <span className="tab-count">{feedback.length}</span></h2>
           <label className="admin-filter">Show feedback<select className="form-select" value={feedbackFilter} onChange={event=>setFeedbackFilter(event.target.value)}><option value="open">Open</option><option value="resolved">Resolved</option><option value="archived">Archived</option><option value="all">All statuses</option></select></label>

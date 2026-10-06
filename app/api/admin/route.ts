@@ -77,6 +77,7 @@ export async function GET(request?:Request) {
       const cursor=readCursor(params.get('cursor')),limit=limitFor(params);
       const listings:Record<string,string>={reports:'SELECT r.*,w.title AS work_title,w.author AS work_author FROM reports r LEFT JOIN works w ON w.id=r.work_id',feedback:'SELECT * FROM feedback',works:"SELECT w.id,w.title,w.author,w.status,w.words,w.created_at,(SELECT COUNT(*) FROM reviews r WHERE r.work_id=w.id)::int AS reviews FROM works w WHERE w.status<>'draft'",flaggedMessages:'SELECT id,sender,recipient,body,flagged,created_at FROM messages WHERE flagged>0'};
       listings.audit='SELECT a.*,p.name AS admin_name FROM admin_actions a JOIN profiles p ON p.id=a.admin_id';
+      listings.critiquePilot="SELECT e.id,e.evidence,e.created_at,r.author,r.work_id,w.title FROM critique_evidence e JOIN reviews r ON r.id=e.id JOIN works w ON w.id=r.work_id WHERE w.status NOT IN ('draft','withdrawn')";
       const listing=listings[params.get('collection')||''];if(!listing)return json({error:'Unknown admin collection.'},400);
       const collection=params.get('collection');const filters:string[]=[],values:unknown[]=[];
       if(collection==='feedback'||collection==='reports'){const allowed=collection==='feedback'?['open','resolved','archived']:['open','dismissed'];const status=params.get('status')||'open';if(status!=='all'){if(!allowed.includes(status))return json({error:'Unknown status.'},400);filters.push('status=?');values.push(status);}}

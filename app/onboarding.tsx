@@ -7,6 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { genres } from './data';
 import type { Act, Snapshot } from './workshop';
 import { AvatarUpload } from '@/components/avatar-upload';
+import {TERMS_VERSION} from '@/lib/workshop-policy';
+import {JevTermsNotice} from '@/components/jev-terms-notice';
 
 export function Onboarding({ user, act, busy, error, onComplete }: {
   user: NonNullable<Snapshot['user']>; act: Act; busy: boolean; error: string; onComplete: () => void;
@@ -22,7 +24,7 @@ export function Onboarding({ user, act, busy, error, onComplete }: {
   const toggleGenre = (genre: string) => setSelectedGenres(current => current.includes(genre)
     ? current.filter(g => g !== genre) : current.length < 5 ? [...current, genre] : current);
   async function finish() {
-    const saved = await act({ action: 'completeOnboarding', acceptedTerms, termsVersion:'2026-10-03', name: name.trim(), bio, location,
+    const saved = await act({ action: 'completeOnboarding', acceptedTerms, termsVersion:TERMS_VERSION, name: name.trim(), bio, location,
       age: user.age ?? '', sex: user.sex || '', interests: [interests.trim(), ...selectedGenres].filter(Boolean).join(', ') }, 'Welcome to OpenDraft. Your profile is ready.');
     if (saved) onComplete();
   }
@@ -63,7 +65,7 @@ export function Onboarding({ user, act, busy, error, onComplete }: {
           <p>Save a private draft, explore the reading room, or give another writer thoughtful feedback. Your writing stays private until you publish it.</p>
           <p className="fine-print">Five credits publish a piece for two reviewers. A 175-word reading-room critique earns one credit, with more for extra feedback. Credits are earned, never sold.</p>
         </div>}
-        {step===2&&<label className="settings-check"><input type="checkbox" checked={acceptedTerms} onChange={e=>setAcceptedTerms(e.target.checked)}/>I am at least 13, meet local age requirements, and have parent or guardian permission if under 18. I agree to the <a href="/terms" target="_blank" rel="noreferrer">terms</a> and have read the <a href="/privacy" target="_blank" rel="noreferrer">privacy policy</a>.</label>}
+        {step===2&&<JevTermsNotice/>}{step===2&&<label className="settings-check"><input type="checkbox" checked={acceptedTerms} onChange={e=>setAcceptedTerms(e.target.checked)}/>I am at least 13, meet local age requirements, and have parent or guardian permission if under 18. I agree to the <a href="/terms" target="_blank" rel="noreferrer">terms</a> and have read the <a href="/privacy" target="_blank" rel="noreferrer">privacy policy</a>.</label>}
         {error && <p className="onboarding-error" role="alert">{error}</p>}
         <div className="onboarding-actions">
           {step > 0 && <Button type="button" variant="outline" onClick={() => setStep(step - 1)} disabled={busy}><ArrowLeft size={15} />Back</Button>}

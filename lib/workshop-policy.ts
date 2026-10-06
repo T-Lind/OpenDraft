@@ -1,0 +1,3 @@
+// Safe to import in client components as well as server routes.
+export const TERMS_VERSION = '2026-10-06';
+export const JEV_NOTICE = 'OpenDraft uses Jev through Vercel AI Gateway and TypeSafe AI to evaluate writing and feedback. Accepting these terms permits manuscript, feedback-request, critique, and line-note processing for workshop checks, including automatic checks while you compose a critique. Jev evaluates; it does not write your critique. OpenDraft requires no-training routing. Provider processing and retention policies still apply; zero retention is not promised. Profile details, private messages, and reading telemetry are not sent.';

@@ -310,11 +310,11 @@ test('approval-only circles protect context until the owner approves, and accoun
   } finally { await fresh.close().catch(()=>{}); }
 });
 
-test('content-note suggestions require per-check consent and explicit application',async({page},testInfo)=>{
+test('content-note suggestions use workshop terms and require explicit application',async({page},testInfo)=>{
   await registerWriter(page,`ci-themes-${Date.now()}-${testInfo.project.name}@example.test`,'CI Theme Writer');
   // Do not send test drafts to a model or spend gateway credits in CI.
   let requests=0;
-  await page.route('**/api/content-check',async route=>{requests++;expect(route.request().postDataJSON().consent).toBe(true);await route.fulfill({json:{suggestions:[{theme:'Violence',uncertain:false},{theme:'Trauma',uncertain:true}]}});});
+  await page.route('**/api/content-check',async route=>{requests++;expect(route.request().postDataJSON().consent).toBeUndefined();await route.fulfill({json:{suggestions:[{theme:'Violence',uncertain:false},{theme:'Trauma',uncertain:true}]}});});
   await page.getByRole('button',{name:'Share your writing',exact:true}).click();
   await page.getByRole('textbox',{name:'Your writing',exact:true}).fill('A fictional passage used only in automated browser testing.');
   await page.getByText('Submission settings',{exact:false}).click();

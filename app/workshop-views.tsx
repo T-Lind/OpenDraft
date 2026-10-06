@@ -26,6 +26,12 @@ import { CritiqueReservation, useCritiqueReservation } from '@/components/critiq
 import { CircleWorkshop } from '@/components/circle-workshop';
 import { CircleMembers } from '@/components/circle-members';
 import { ContentThemeCheck } from '@/components/content-theme-check';
+import {QueueProgress} from '@/components/queue-progress';
+import {ReadingPilot,CritiqueQuality} from '@/components/critique-quality';
+import {useAutoCritiqueCheck} from '@/hooks/use-auto-critique-check';
+import {MIN_CRITIQUE_WORDS,CRITIQUE_CREDIT_RULE} from '@/lib/critique-rubric';
+import {TERMS_VERSION} from '@/lib/workshop-policy';
+import {useReviewEngagement} from '@/hooks/use-review-engagement';
 
 function FieldSelect({ label, value, options, change }: { label: string; value: string; options: string[]; change: (v: string) => void }) {
   return <label className="field-label">{label}<select className="form-select" value={value} onChange={e => change(e.target.value)}>{options.map(o => <option key={o}>{o}</option>)}</select></label>;
@@ -524,12 +530,13 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
 
 /* -------------------------------------------------------------------- Reader */
 
-const MIN_REVIEW_WORDS = 175;
+const MIN_REVIEW_WORDS = MIN_CRITIQUE_WORDS;
 
 export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: { work: Work; data: Snapshot; act: Act; busy: boolean; back: () => void; onSignIn: () => void; onAuthor: (id: string) => void }) {
   const [readingFocus, setReadingFocus] = useState(false);
   const critiqueRef = useRef<HTMLElement>(null);
-  const [form, setForm] = useState({ overall: '', strengths: '', suggestions: '',processDisclosure:'human-only' as 'human-only'|'assistive-tools',attested:false }), [report, setReport] = useState(false), [reason, setReason] = useState(''), [feedbackTab, setFeedbackTab] = useState('Write a critique');
+  const manuscriptRef = useRef<HTMLElement>(null);
+  const [form, setForm] = useState({ overall: '', strengths: '', suggestions: '' }), [report, setReport] = useState(false), [reason, setReason] = useState(''), [feedbackTab, setFeedbackTab] = useState('Write a critique');
   const [history, setHistory] = useState(() => annotationHistory<WorkAnnotation>());
   const localAnnotations = history.present;
   const tracked = useRef('');
@@ -541,10 +548,14 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
   const reservation = useCritiqueReservation(w.id, canAnnotate, data.revision);
   const [critiqueStorageAvailable,setCritiqueStorageAvailable]=useState(true);
   const key = 'opendraft:temporary-critique:' + w.id + ':' + (uid || 'guest') + ':' + w.version;
+  const engagement=useReviewEngagement(key,w.version,w.content,manuscriptRef);
+  const qualityEnabled=canAnnotate&&data.user?.termsVersion===TERMS_VERSION&&!!w.jevReviewAvailable;
+  const critiqueDraft={...form,annotations:localAnnotations};
+  const critiqueCheck=useAutoCritiqueCheck(w.id,w.version,critiqueDraft,qualityEnabled);
 
   // Restore this writer's temporary browser draft after hydration or a work change.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setForm({ overall: '', strengths: '', suggestions: '',processDisclosure:'human-only',attested:false }); setHistory(annotationHistory()); try { const text = sessionStorage.getItem(key); if (text) { const parsed = JSON.parse(text) as typeof form & { annotations?: WorkAnnotation[] }; setForm({ overall: parsed.overall || '', strengths: parsed.strengths || '', suggestions: parsed.suggestions || '',processDisclosure:parsed.processDisclosure==='assistive-tools'?'assistive-tools':'human-only',attested:!!parsed.attested }); setHistory(annotationHistory(Array.isArray(parsed.annotations) ? parsed.annotations.filter(a => a.workId === w.id && a.userId === uid && a.id.startsWith('local-')) : [])); } } catch { /* ignore */ } }, [key, w.id, uid]);
+  useEffect(() => { setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory()); try { const text = sessionStorage.getItem(key); if (text) { const parsed = JSON.parse(text) as typeof form & { annotations?: WorkAnnotation[] }; setForm({ overall: parsed.overall || '', strengths: parsed.strengths || '', suggestions: parsed.suggestions || '' }); setHistory(annotationHistory(Array.isArray(parsed.annotations) ? parsed.annotations.filter(a => a.workId === w.id && a.userId === uid && a.id.startsWith('local-')) : [])); } } catch { /* ignore */ } }, [key, w.id, uid]);
 
   useEffect(() => {
     if (!uid || own || tracked.current === w.id) return;
@@ -559,12 +570,12 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
     try { sessionStorage.setItem(key, JSON.stringify({ ...form, annotations: next.present }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); }
   };
   const totalWords = wordCount(form.overall + ' ' + form.strengths + ' ' + form.suggestions + ' ' + localAnnotations.map(a => a.body).join(' '));
-  const valid = totalWords > 0&&form.attested;
+  const valid = totalWords > 0;
   const inRoom = w.status === 'spotlight';
   const baseCredit = inRoom ? 1 : 0.5;
   const perWord = inRoom ? 0.005 : 0.0025;
   const reward = totalWords < MIN_REVIEW_WORDS ? 0 : Math.round((baseCredit + (totalWords - MIN_REVIEW_WORDS) * perWord) * 1000) / 1000;
-  const submit = async () => { const payload = { ...form, workId: w.id, annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, reward ? `Critique shared. You earned ${formatCredits(reward)} credits.` : 'Critique shared. Thank you for helping this writer. No credits earned for this shorter critique.')) { try{sessionStorage.removeItem(key);}catch{/* The server submission succeeded even if tab storage is unavailable. */} setForm({ overall: '', strengths: '', suggestions: '',processDisclosure:'human-only',attested:false }); setHistory(annotationHistory()); setFeedbackTab('All feedback'); } };
+  const submit = async () => { const payload = { ...form, attested:true, workId: w.id,version:w.version, ...(engagement.summary?{engagement:engagement.summary}:{}), annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, 'Critique shared.')) { try{sessionStorage.removeItem(key);}catch{/* The server submission succeeded even if tab storage is unavailable. */} setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory()); engagement.clear(); setFeedbackTab('All feedback'); } };
   const saved = data.bookmarks.includes(w.id);
 
   const serverAnnotations: WorkAnnotation[] = (data.annotations || []).filter(a => a.workId === w.id).map(a => ({ ...a, start: a.startPos ?? a.start, end: a.endPos ?? a.end }));
@@ -587,10 +598,11 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
       <h1 className="write-title">Write a critique</h1>
       <div className="reading-tools"><ReadingSettings/><button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button><button type="button" className="reading-settings-button" onClick={() => { critiqueRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'instant' : 'smooth', block: 'start' }); critiqueRef.current?.focus({ preventScroll: true }); }}><MessageSquare size={16}/>Jump to feedback</button></div>
       {canAnnotate && <CritiqueReservation reservation={reservation} workId={w.id}/>}
+      {canAnnotate && <ReadingPilot summary={engagement.summary} start={engagement.start} clear={engagement.clear}/>}
       {canAnnotate && !critiqueStorageAvailable && <p className="form-error" role="alert">Tab storage is unavailable. Keep this page open or copy your feedback elsewhere until you submit it; it cannot be recovered after a reload.</p>}
       <div className="reader-grid">
         <div>
-          <article className="reader-manuscript">
+          <article ref={manuscriptRef} className="reader-manuscript">
             <div className="reader-kicker">
               <span className="tag">{w.genre}</span>
               <span>{w.kind} · {w.stage}</span>
@@ -619,16 +631,16 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
           </article>
 
           <section ref={critiqueRef} tabIndex={-1} className="panel-card critique-composer-panel" style={{ marginTop: 16 }} aria-label="Your critique">
-            <div className="critique-panel-heading"><Sparkles size={16} /><h2>Your critique</h2><span className="reward-badge">{formatCredits(reward)} credits</span></div>
-            <p className="critique-intro">Use the line tools above, then add as much or as little prose as you like. Structured feedback is optional.</p>
-            <Tabs value={feedbackTab} onValueChange={setFeedbackTab}>
+            <div className="critique-panel-heading"><Sparkles size={16} /><h2>{own?'Feedback on your writing':'Your critique'}</h2>{!own&&<span className="reward-badge">{formatCredits(reward)} credits</span>}</div>
+            <p className="critique-intro">{own?'Critiques from readers of your writing.':`Your critique is for ${w.author}. Use the line tools, then add as much or as little prose as you like.`}</p>
+            <Tabs value={own?'All feedback':feedbackTab} onValueChange={setFeedbackTab}>
               <TabsList className="feedback-tabs">
-                <TabsTrigger value="Write a critique">Write a critique</TabsTrigger>
-                <TabsTrigger value="All feedback">Your feedback {reviews.length ? `(${reviews.length})` : ''}</TabsTrigger>
+                {!own&&<TabsTrigger value="Write a critique">Write a critique</TabsTrigger>}
+                <TabsTrigger value="All feedback">{own?'Feedback for you':`Feedback for ${w.author}`} {reviews.length ? `(${reviews.length})` : ''}</TabsTrigger>
               </TabsList>
               <TabsContent value="Write a critique">
-                {own ? <div className="notice-box">This is your work. Open the Feedback tab to read your critiques.</div>
-                  : done ? <div className="notice-box"><Check size={20} /><h3>Your perspective is in.</h3><p>You’ve already critiqued this version. Thank you for helping the next draft.</p><Button variant="outline" onClick={() => setFeedbackTab('All feedback')}>Read your feedback</Button></div>
+                {own ? <div className="notice-box">This is your work. Read the feedback from your readers.</div>
+                  : done ? <div className="notice-box"><Check size={20} /><h3>Your perspective is in.</h3><p>You’ve already critiqued this version. Thank you for helping the next draft.</p><Button variant="outline" onClick={() => setFeedbackTab('All feedback')}>Read your critique</Button></div>
                     : <form className="critique-form" onSubmit={e => { e.preventDefault(); if (data.user) void submit(); else onSignIn(); }}>
                       <label className="field-label">Your critique<span className="field-hint">What stayed with you? What should the writer try next?</span><Textarea maxLength={12000} rows={6} value={form.overall} onChange={e => update('overall', e.target.value)} placeholder="A few sentences, or a long, careful read…" /></label>
                       <details className="optional-structured">
@@ -636,20 +648,19 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
                         <label className="field-label">What’s working?<Textarea maxLength={12000} rows={4} value={form.strengths} onChange={e => update('strengths', e.target.value)} placeholder="A moment, image, or choice that stayed with you." /></label>
                         <label className="field-label">What could be stronger?<Textarea maxLength={12000} rows={4} value={form.suggestions} onChange={e => update('suggestions', e.target.value)} placeholder="A possibility to consider." /></label>
                       </details>
-                      <div className="critique-wordcount"><span>{totalWords} words</span><span>{totalWords >= MIN_REVIEW_WORDS ? <><Check size={13} />{formatCredits(reward)} credits earned</> : 'Short critique · 0 credits'}</span></div>
+                      <div className="critique-wordcount"><span>{totalWords} words</span><span>{totalWords >= MIN_REVIEW_WORDS ? critiqueCheck.current?.result?.credit.eligible===false?'Below quality requirement · 0 credits':`${formatCredits(reward)} potential credits` : 'Short critique · 0 credits'}</span></div>
                       <div className="word-progress"><span style={{ width: Math.min(100, (totalWords / MIN_REVIEW_WORDS) * 100) + '%' }} /></div>
-                      <p className="fine-print">Short critiques are welcome, even if you don’t have {MIN_REVIEW_WORDS} words of feedback. They earn no credits—share what’s useful without padding.</p>
-                      <p className="fine-print">At {MIN_REVIEW_WORDS} words you earn {formatCredits(baseCredit)} {baseCredit === 1 ? 'credit' : 'credits'}, plus <strong>{formatCredits(perWord * 100)} credits per additional 100 words</strong> ({perWord} per word). Thoughtful detail is worth your time. Line notes count toward your total.</p>
-                      <fieldset className="ai-review-policy"><legend>Human critique policy</legend><p>Read the work yourself and make the critique your own. Assistive tools may help organize notes, but generated feedback you have not personally reviewed and stand behind is not welcome.</p><label className="field-label">Your process<select className="form-select" value={form.processDisclosure} onChange={event=>update('processDisclosure',event.target.value)}><option value="human-only">I wrote this critique without generative AI</option><option value="assistive-tools">I used an assistive tool and personally reviewed every point</option></select></label><label className="check-row"><input type="checkbox" checked={form.attested} onChange={event=>update('attested',event.target.checked)}/><span>I read this work, and this critique reflects my own judgment.</span></label><p className="fine-print">OpenDraft does not use unreliable “AI detectors.” It uses clear disclosure, member reports, and human review.</p></fieldset>
-                      <span className="disabled-wrap" title={!data.user ? 'Sign in to share a critique.' : !totalWords ? 'Add some feedback first. Short critiques are welcome.' : !form.attested?'Confirm the human critique statement.':busy ? 'Sharing…' : reward ? `Share this critique and earn ${formatCredits(reward)} credits.` : 'Share this shorter critique without earning credits.'}>
-                        <Button type="submit" className="primary-button submit-critique" disabled={busy || (!!data.user && !valid)}>{busy ? <LoaderCircle size={15} className="animate-spin" /> : <MessageSquare size={15} />} {data.user ? `Share your critique${localAnnotations.length ? ` (+${localAnnotations.length} line notes)` : ''}` : 'Sign in to critique'}</Button>
+                      <p className="fine-print">{CRITIQUE_CREDIT_RULE} Shorter critiques are welcome without credits.</p>
+                      <CritiqueQuality key={key} content={w.content} draft={critiqueDraft} enabled={qualityEnabled} check={critiqueCheck}/><p className="fine-print human-critique-reminder">Write your critique yourself. Generative AI may not write or rewrite it. Jev evaluates only.</p>
+                      <span className="disabled-wrap" title={!data.user ? 'Sign in to share a critique.' : !totalWords ? 'Add some feedback first. Short critiques are welcome.' : busy ? 'Sharing and checking credit eligibility…' : reward ? 'Credits depend on the final server Jev check.' : 'Share this shorter critique without earning credits.'}>
+                        <Button type="submit" className="primary-button submit-critique" disabled={busy || (!!data.user && !valid)}>{busy ? <LoaderCircle size={15} className="animate-spin" /> : <MessageSquare size={15} />} {data.user ? `${reward&&critiqueCheck.current?.result?.credit.eligible===false?'Share without credits':'Share your critique'}${localAnnotations.length ? ` (+${localAnnotations.length} line notes)` : ''}` : 'Sign in to critique'}</Button>
                       </span>
                       <p className="privacy-note">{w.critiqueVisibility==='private'?'Your critique is private between you and the writer.':'Your critique will be visible to workshop members.'}</p>
                     </form>}
               </TabsContent>
               <TabsContent value="All feedback">
                 {reviews.length ? <div style={{ padding: '4px 14px 14px' }}>{reviews.map(r => <FeedbackCard key={r.id} review={r} own={own} act={act} busy={busy} onAuthor={onAuthor} annotations={serverAnnotations.filter(a => a.reviewId === r.id)} />)}</div>
-                  : <div className="notice-box"><MessageSquare size={22} /><h3>No feedback yet.</h3><p>{w.critiqueVisibility==='private'?'Critiques stay private between each reader and the writer.':'Public critiques appear here for workshop members.'}</p></div>}
+                  : <div className="notice-box"><MessageSquare size={22} /><h3>{own?'No feedback on your writing yet.':w.critiqueVisibility==='private'?'You haven’t critiqued this work yet.':`No feedback for ${w.author} yet.`}</h3><p>{own?`Readers’ critiques of your work will appear here.${w.critiqueVisibility==='private'?' Only you and each reviewer can see their critique.':''}`:w.critiqueVisibility==='private'?`Your critique will be shared with ${w.author}. Other readers’ critiques are private.`:`Critiques here are for ${w.author}, and are visible to workshop members.`}</p></div>}
               </TabsContent>
             </Tabs>
           </section>
@@ -723,9 +734,6 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
   const done = w.hasReviewed || data.reviews.some(r => r.workId === w.id && r.userId === uid && r.version === w.version);
   const saved = w.bookmarked || data.bookmarks.includes(w.id);
   const workStats = own && analytics ? analytics.works.find(x => x.workId === w.id) : undefined;
-  const inRoom = w.status === 'spotlight';
-  const baseCredit = inRoom ? 1 : 0.5;
-  const perWord = inRoom ? 0.005 : 0.0025;
   const paragraphs = w.content.split('\n\n');
   const preview = paragraphs.slice(0, 2).join('\n\n');
   const body = expanded ? w.content : preview;
@@ -749,10 +757,10 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
           <div>
             <div className="story-cta">
               <div>
-                <strong>Write a critique</strong>
-                <p className="fine-print">Short critiques are welcome without credits. At {MIN_REVIEW_WORDS} words, earn {formatCredits(baseCredit)} {baseCredit === 1 ? 'credit' : 'credits'}, plus <strong>{formatCredits(perWord * 100)} credits per additional 100 words</strong> ({perWord} per word).{!inRoom && ' Critiques outside the reading room earn half credit.'}</p>
+                <strong>{own?'Feedback on your writing':done?'Your critique':'Write a critique'}</strong>
+                {own?<p className="fine-print">Read what other writers have said about your work.</p>:<p className="fine-print">Your critique is for {w.author}. Short critiques are welcome; credits start at {MIN_REVIEW_WORDS} words.</p>}
               </div>
-              <Button className="primary-button" onClick={onCritique} title={own ? 'Read the critiques on your own work' : done ? 'You have already critiqued this version' : 'Read closely and leave line notes'}>{own ? 'Open your work' : done ? 'Read your critique' : 'Write a critique'} <ChevronRight size={14} /></Button>
+              <Button className="primary-button" onClick={onCritique} title={own ? 'Read the critiques on your own work' : done ? 'You have already critiqued this version' : 'Read closely and leave line notes'}>{own ? 'Read feedback for you' : done ? 'Read your critique' : 'Write a critique'} <ChevronRight size={14} /></Button>
             </div>
 
             <h2 className="section-title">About this work</h2>
@@ -767,7 +775,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
               <button className="continue-reading" onClick={() => setExpanded(true)}>Continue reading ({w.words.toLocaleString()} words) <ChevronDown size={14} /></button>
             )}
 
-            <h2 className="section-title" style={{ marginTop: 22 }}>Critiques &amp; comments {reviews.length ? `(${reviews.length})` : ''}</h2>
+            <h2 className="section-title" style={{ marginTop: 22 }}>{own?'Feedback on your writing':`Feedback for ${w.author}`} {reviews.length ? `(${reviews.length})` : ''}</h2>
             {reviews.length ? (
               <div className="story-critiques">
                 {reviews.map(r => (
@@ -778,7 +786,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
                   </article>
                 ))}
               </div>
-            ) : <p className="fine-print">No critiques yet. Yours could be the first.</p>}
+            ) : <p className="fine-print">{own?'No feedback on your writing yet. Readers’ critiques will appear here.':w.critiqueVisibility==='private'?`You haven’t critiqued this work yet. Your critique will be shared with ${w.author}; other readers’ critiques are private.`:`No feedback for ${w.author} yet. Your critique could be the first.`}</p>}
           </div>
 
           <aside className="critique-panel">
@@ -791,7 +799,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
                   <dt>Reading time</dt><dd>{readingTimeLabel(w.words)}</dd>
                   <dt>Critiques</dt><dd>{reviews.length} of {w.targetReviews || 2}</dd>
                   <dt>Line notes</dt><dd>{annotations.length}</dd>
-                  <dt>Status</dt><dd>{w.status === 'spotlight' ? 'Reading room' : w.status === 'queued' ? 'In queue' : w.status === 'open' ? 'Open' : w.status}</dd>
+                  <dt>Status</dt><dd>{w.status === 'spotlight' ? 'Reading room' : w.status === 'queued' ? 'In queue' : w.status === 'open' ? 'Open' : w.status}<QueueProgress work={w}/></dd>
                 </dl>
               </div>
             </div>
@@ -1112,7 +1120,7 @@ export function Guide({ onExplore, onWrite, onAbout }: { onExplore: () => void; 
   return (
     <div className="guide">
       <div className="guide-steps">
-        {[{ number: '01', icon: BookOpen, title: 'Read something new.', body: 'Browse the reading room for stories, poems, and chapters looking for a fresh perspective. Every writer leaves a note about the feedback they need.' }, { number: '02', icon: MessageSquare, title: 'Give a thoughtful critique.', body: 'Leave line notes and as much prose as you like. Short feedback is welcome without credits. In the reading room, 175 words earn 1 credit, plus 0.5 credits for every additional 100 words (0.005 per word). Share useful detail, without padding.' }, { number: '03', icon: Feather, title: 'Share your next draft.', body: 'Publishing costs 5 credits. Each genre keeps four works in its reading room; the rest wait in that genre’s queue, oldest first. After the requested critiques, a piece makes room for the next writer.' }].map(({ number, icon: Icon, title, body }) => (
+        {[{ number: '01', icon: BookOpen, title: 'Read something new.', body: 'Browse the reading room for stories, poems, and chapters looking for a fresh perspective. Every writer leaves a note about the feedback they need.' }, { number: '02', icon: MessageSquare, title: 'Give a thoughtful critique.', body: 'Leave line notes and as much prose as you like. Short feedback is welcome without credits. In the reading room, eligible critiques of at least 175 words earn 1 credit, plus 0.5 credits for every additional 100 words (0.005 per word). Jev average must exceed 2/4, with grounding and usefulness each at least 2/4. Share useful detail, without padding.' }, { number: '03', icon: Feather, title: 'Share your next draft.', body: 'Publishing costs 5 credits. Each genre keeps four works in its reading room; the rest wait in that genre’s queue, oldest first. After the requested critiques, a piece makes room for the next writer.' }].map(({ number, icon: Icon, title, body }) => (
           <article key={number}><span className="step-number">{number}</span><Icon size={22} /><h2>{title}</h2><p>{body}</p></article>
         ))}
       </div>

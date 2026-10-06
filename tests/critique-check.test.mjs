@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdirSync} from 'node:fs';
+import {resolve} from 'node:path';
+mkdirSync('.sites-runtime/tests',{recursive:true});
+const context={user:{uid:'synthetic-reviewer',profile:{terms_version:'2026-10-06'}},work:{content:'The light stays on.\n\nThe narrator leaves.',request:'Does the final image work?',version:1,jev_review_available:false},rates:[],calls:[]};
+globalThis.__critiqueRouteTest=context;
+await build({entryPoints:['app/api/critique-check/route.ts'],outfile:'.sites-runtime/tests/critique-check-boundary.mjs',bundle:true,format:'esm',platform:'node',packages:'external',plugins:[{name:'boundary-adapters',setup(b){
+ b.onResolve({filter:/^@\/(db\/storage|lib\/member|lib\/rate-limit)$/},args=>({path:args.path,namespace:'boundary'}));
+ b.onLoad({filter:/.*/,namespace:'boundary'},args=>({contents:args.path==='@/db/storage'?'export const database=()=>({prepare:()=>({bind:()=>({first:async()=>globalThis.__critiqueRouteTest.work})})});':args.path==='@/lib/member'?`export const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status})};export const member=async()=>globalThis.__critiqueRouteTest.user;export const TERMS_VERSION='2026-10-06';export const requireTerms=(p)=>{if(p.terms_version!==TERMS_VERSION)throw Object.assign(new Error('Updated terms required'),{status:428})};`:'export const rateLimit=async(_,key)=>{globalThis.__critiqueRouteTest.rates.push(key)};export const rateLimitCooldown=rateLimit;',loader:'js'}));
+ b.onResolve({filter:/^@\//},args=>({path:resolve(args.path.slice(2)+'.ts')}));
+ // Jev uses a relative import of member; route and evaluator share the same fail helper.
+ b.onResolve({filter:/^\.\/member$/},()=>({path:'@/lib/member',namespace:'boundary'}));
+}}]});
+const {POST}=await import('../.sites-runtime/tests/critique-check-boundary.mjs');
+const originalFetch=globalThis.fetch,originalKey=process.env.AI_GATEWAY_API_KEY;
+const request=async(body,origin='https://workshop.test')=>{const response=await POST(new Request('https://workshop.test/api/critique-check',{method:'POST',headers:{Origin:origin},body:JSON.stringify(body)}));return {status:response.status,data:await response.json()};};
+const note={kind:'comment',quote:'The light',body:'This detail prepares the final image without explaining it.',para:0,start:0,end:9};
+const input={workId:'synthetic',version:1,draft:{overall:'The final image is effective because it leaves the narrator’s choice open.',strengths:'',suggestions:'',annotations:[note]}};
+try {
+ process.env.AI_GATEWAY_API_KEY='synthetic-test-token';
+ globalThis.fetch=async(url,options)=>{context.calls.push(JSON.parse(options.body));assert.equal(url,'https://ai-gateway.vercel.sh/v1/evaluate');return Response.json({answers:{grounding:{score:3.4},relevance:{score:3},rationale:{score:2},usefulness:{score:3}}});};
+ assert.equal((await request(input,'https://evil.test')).status,403);
+ context.user=null;assert.equal((await request(input)).status,401);context.user={uid:'synthetic-reviewer',profile:{terms_version:'2026-10-06'}};
+ assert.equal((await request(input)).status,403,'writer must accept current terms');
+ context.work.jev_review_available=true;
+ context.user.profile.terms_version='old';assert.equal((await request(input)).status,428);context.user.profile.terms_version='2026-10-06';
+ assert.equal((await request({...input,consent:false})).status,400);
+ assert.equal((await request({...input,version:2})).status,409);
+ assert.equal((await request({...input,draft:{...input.draft,annotations:[{...note,quote:'fake'}]}})).status,400);
+ assert.equal((await request({...input,draft:{...input.draft,annotations:[{...note,userId:'private-id'}]}})).status,400);
+ assert.equal(context.calls.length,0,'denied requests cannot reach the provider');
+ assert.equal(context.rates.length,0,'invalid submissions cannot exhaust the shared model budget');
+ const result=await request(input);assert.equal(result.status,200);assert.equal(result.data.scores.grounding,3.4);
+ const body=context.calls[0];assert.deepEqual(Object.keys(body.state).sort(),['critique','work','writerRequest']);
+ assert.deepEqual(body.state.work.paragraphs,[{index:0,text:'The light stays on.'},{index:1,text:'The narrator leaves.'}]);
+ assert.deepEqual(Object.keys(body.state.critique.annotations[0]).sort(),['body','end','kind','para','quote','start']);
+ assert.equal(body.providerOptions.gateway.disallowPromptTraining,true);assert.deepEqual(body.providerOptions.gateway.only,['typesafe-ai']);
+ assert.deepEqual(Object.keys(body.questions),['grounding','relevance','rationale','usefulness']);
+ assert.ok(Object.values(body.questions).every(q=>q.instructions.includes('Do not infer reading completion')&&q.instructions.includes('AI authorship')));
+ assert.notDeepEqual(body.questions.grounding.criteria,body.questions.rationale.criteria);
+ assert.ok(body.questions.usefulness.instructions.includes('Personal insults'));
+ assert.equal(result.data.rubric,'critique-substance-v2');assert.equal(result.data.credit.eligible,true);
+ globalThis.fetch=async()=>Response.json({answers:Object.fromEntries(['grounding','relevance','rationale','usefulness'].map(key=>[key,{score:2}]))});
+ const exact=await request(input);assert.equal(exact.data.credit.mean,2);assert.equal(exact.data.credit.eligible,false,'exactly two cannot qualify');
+ globalThis.fetch=async()=>Response.json({answers:{grounding:{score:2.01},relevance:{score:2.01},rationale:{score:2.01},usefulness:{score:2.01}}});
+ const above=await request(input);assert.equal(above.data.scores.grounding,2.01);assert.equal(above.data.credit.eligible,true,'raw scores above two must not round into failure');
+ globalThis.fetch=async()=>Response.json({answers:{grounding:{score:1.99},relevance:{score:4},rationale:{score:4},usefulness:{score:4}}});
+ assert.equal((await request(input)).data.credit.eligible,false,'grounding floor prevents averaging away invented details');
+ globalThis.fetch=async()=>Response.json({answers:{grounding:{score:4},relevance:{score:4},rationale:{score:4},usefulness:{score:1.99}}});
+ assert.equal((await request(input)).data.credit.eligible,false,'usefulness floor prevents averaging away poor delivery');
+ globalThis.fetch=async()=>Response.json({answers:{grounding:{score:99}}});assert.equal((await request(input)).status,503);
+ globalThis.fetch=async()=>new Response('Unavailable',{status:503});assert.equal((await request(input)).status,503);
+ context.work.jev_review_available=false;assert.equal((await request(input)).status,403);
+ console.log('Critique check server boundaries passed: workshop terms, authentication, origin, version, anchors, profile exclusion, no-training routing, and failure handling.');
+} finally {globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.AI_GATEWAY_API_KEY;else process.env.AI_GATEWAY_API_KEY=originalKey;delete globalThis.__critiqueRouteTest;}

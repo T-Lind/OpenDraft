@@ -1,7 +1,7 @@
 import type {Database} from '@/db/storage';
 import {camel} from './workshop-query';
 import {readCursor,limitFor,pageOf} from './pagination';
-import {fail} from './member';
+import {fail,TERMS_VERSION} from './member';
 import {readAccountPreferences} from './account-preferences';
 export const showcaseEligibility="w.status NOT IN ('draft','withdrawn') AND w.showcase_opt_in=true AND p.deleted_at=0 AND p.onboarding_completed=true AND NOT EXISTS(SELECT 1 FROM reports r WHERE r.work_id=w.id AND r.status='open')";
 export async function communityRead(db:Database,uid:string,admin:boolean,params:URLSearchParams){
@@ -46,7 +46,7 @@ export async function communityRead(db:Database,uid:string,admin:boolean,params:
  if(section==='candidates'){
   if(!admin)fail('Administrator access is required.',403);
   const day=params.get('day')||new Date().toISOString().slice(0,10);
-  const rows=(await db.prepare('SELECT w.id,w.title,w.author,w.author_id,w.genre,w.warning,w.mature,w.words,w.created_at,w.ai_showcase_consent,w.ai_assessment FROM works w JOIN profiles p ON p.id=w.author_id WHERE '+showcaseEligibility+" AND NOT EXISTS(SELECT 1 FROM showcases s JOIN works previous ON previous.id=s.work_id WHERE previous.author_id=w.author_id AND s.day<>? AND s.day::date BETWEEN (?::date-29) AND (?::date+29)) "+(cursor?'AND (w.created_at,w.id)<(?,?)':'')+' ORDER BY w.created_at DESC,w.id DESC LIMIT ?').bind(day,day,day,...(cursor?[cursor.value,cursor.id]:[]),limit+1).all()).results;
+  const rows=(await db.prepare('SELECT w.id,w.title,w.author,w.author_id,w.genre,w.warning,w.mature,w.words,w.created_at,(p.terms_version=\''+TERMS_VERSION+'\') AS ai_showcase_consent,w.ai_assessment FROM works w JOIN profiles p ON p.id=w.author_id WHERE '+showcaseEligibility+" AND NOT EXISTS(SELECT 1 FROM showcases s JOIN works previous ON previous.id=s.work_id WHERE previous.author_id=w.author_id AND s.day<>? AND s.day::date BETWEEN (?::date-29) AND (?::date+29)) "+(cursor?'AND (w.created_at,w.id)<(?,?)':'')+' ORDER BY w.created_at DESC,w.id DESC LIMIT ?').bind(day,day,day,...(cursor?[cursor.value,cursor.id]:[]),limit+1).all()).results;
   const page=pageOf(rows,limit);return{...page,items:page.items.map(camel)};
  }
  if(section==='scheduled'){

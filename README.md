@@ -1,3 +1,11 @@
+# Current workshop policy (October 6, 2026)
+
+Jev processing is authorized by the current workshop terms, accepted once by writer and reviewer. Critique checks run after 5 seconds without edits, no more than once per 30 seconds. Four 0–4 categories are always visible; changed feedback clears old scores. The v2 rubric uses dimension-specific criteria. New earning critiques require at least 175 words, a fresh server Jev average strictly above 2/4, and grounding/usefulness each at least 2/4. Raw scores determine eligibility; client scores never do. Low-scoring feedback shares without credits; provider failure preserves the draft for retry. Migration 0019 stores private final credit decisions and text fingerprints, exported to the reviewer and deleted with either participant. Prior credit balances are unchanged. No per-work or per-check Jev consent controls remain. Critiques must be human-written; there is no AI process selector. Optional reading telemetry remains a separate voluntary pilot and never affects rewards.
+
+Queued works show a database-derived genre queue position and a broad estimate until all requested critiques. Migration 0018 records actual queue-to-room and room-to-completed transitions, excludes examples and administrative status changes without completed feedback, and starts a real observation window. Forecasts require at least a day of observation and three recent events at each stage; otherwise the UI says an estimate is unavailable. The previous notes below describe earlier iterations where they conflict with this section. Migrations 0017/0018/0019 have not been applied to the live database.
+
+The v2 calibration report is in `tests/fixtures/critique-eval-broad-results.json`: 116 synthetic examples across 17 works, with 30 additional calls repeating ten difficult cases. All 111 supplied quality expectations matched on the final run. These are development labels, not an independent accuracy estimate; quality eligibility is separate from the 175-word minimum. The broader run exposed and corrected a usefulness loophole for one useful observation buried in generic filler. Run the free regression checks with `node tests/critique-credit.test.mjs` and `node tests/critique-check.test.mjs`. Live evaluation is opt-in and requires Gateway credentials: `node scripts/evaluate-critique.mjs --fixtures=tests/fixtures/critique-eval-broad.json --label=broad-review`. That command makes paid model requests; it does not post critiques or change credit balances.
+
 # OpenDraft
 
 A free, MIT-licensed writing workshop for **human writing and human critique**.
@@ -6,11 +14,24 @@ literary reading experience, focused feedback requests, and a fair spotlight que
 Human writing and critique are the workshop norm. Honest process disclosures
 replace unreliable AI-authorship detection; reviewers must personally read and
 stand behind every point they submit. Profile pictures use Google Cloud Vision
-SafeSearch. Authors can separately consent to optional Jev scoring through Vercel
-AI Gateway for operator-assisted showcase selection; public ratings and final
+SafeSearch. Accepted workshop terms authorize Jev checks through Vercel
+AI Gateway for critique evaluation and operator-assisted showcase selection; public ratings and final
 showcase choices remain human.
 
 ## What works
+
+- Optional review quality pilot: focused-tab and manuscript-visible time with a
+  twelve-region visibility map; exact repeated-sentence, anchored-comment spread,
+  and redline rationale hints. Recording starts only on reviewer opt-in; idle and
+  hidden time is excluded. Summaries are shared privately with the operator only
+  on critique submission, included in the reviewer’s export, and deleted with
+  either participant’s account. No time or coverage measure proves reading.
+- Automatic Jev critique checks under the current writer/reviewer workshop terms (grounding, relevance, rationale, usefulness).
+  Checks send manuscript/request/critique/line notes through the existing no-training
+  TypeSafe-only Gateway route. Results are ephemeral and invalidate on edits.
+  No automatic moderation penalties or public reputation changes are enabled. New earning critiques require 175 words, a fresh server Jev average strictly above 2/4, and grounding/usefulness each at least 2/4. Final private decisions are exported to the reviewer and removed on either participant’s deletion. Composer scores never authorize rewards.
+  Migrations `0017_loving_jasper_sitwell`, `0018_tidy_senator_kelly`, and `0019_redundant_spencer_smythe` are required before running this code against
+  a database; use the isolated preview on port 5182 to try it without live data.
 
 - Phone-first five-destination navigation (Home, Read, Write, Inbox, More), labeled
   touch-sized critique tools, keyboard-aware comment positioning, and accessible
@@ -29,7 +50,7 @@ showcase choices remain human.
   members; names/descriptions stay discoverable and published manuscripts stay public.
 - Operator-only, paginated account review for recent unresolved reports and existing
   message flags. Counts and distinct reporters are signals for human review, not guilt.
-- Optional writer-consented Jev content-note hints, with per-request consent, no
+- Optional writer-consented Jev content-note hints, under workshop terms, no
   automatic labels or moderation evidence, no authorship detection, and no publishing
   dependency. Requires configured AI Gateway credentials and a provider route that
   honors `disallowPromptTraining`; unavailable service leaves manual notes available.
@@ -42,7 +63,7 @@ showcase choices remain human.
 
 - Four rotating spotlight places per genre with a FIFO queue. Two critiques release a
   place; published work remains available for further feedback.
-- Five starting credits, one credit for a 175-word spotlight critique and 0.005
+- Five starting credits, one credit for a qualifying 175-word spotlight critique and 0.005
   per extra word; other critiques earn half. Publishing costs five credits for
   two reviewers, plus two credits per additional requested reviewer (up to five).
   Credits are earned, never sold.
@@ -51,7 +72,7 @@ showcase choices remain human.
   sensitive-content notes, and focused questions for reviewers.
 - A readable manuscript view and structured critique editor: strengths,
   suggestions, overall impression, and a comment anchored to a selected passage.
-- Short critiques are welcome without credits; 175 words is the earning threshold,
+- Short critiques are welcome without credits; earning requires 175 words and the final Jev quality gate,
   with 0.5 extra credits per additional 100 words in the reading room. One critique per reader per version;
   no self-critiques. Recipient ratings cover usefulness, specificity, and actionability.
 - Bookmarks, search, genre filters, sorting, feedback inbox, critique history,
@@ -196,7 +217,7 @@ and reviewed by a person.
 Optional Jev assistance uses model `typesafe-ai/jev` through Vercel AI Gateway's
 `/v1/evaluate` endpoint. Production uses server-only `AI_GATEWAY_API_KEY` when configured, with Vercel
 request OIDC as fallback. Local operators may also set the server-only key. Evaluation requires separate
-per-work consent and uses a fixed clarity/craft/distinctiveness rubric. Requests
+accepted workshop terms and uses a fixed clarity/craft/distinctiveness rubric. Requests
 restrict the provider to TypeSafe and disallow prompt training. Provider retention
 still follows its terms; Gateway zero-retention routing requires a paid plan and
 is not enabled on this Hobby deployment. Scores are private to the operator, cached

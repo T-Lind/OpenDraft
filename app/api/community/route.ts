@@ -100,20 +100,20 @@ export async function POST(request:Request){
    }return json({ok:true,reputation:(await reputations(db,[String(review.user_id)]))[0]});
   }
   if(action==='showcaseConsent'){
-   const workId=id(),optIn=z.boolean().parse(b.optIn),aiConsent=z.boolean().parse(b.aiConsent);
+   const workId=id(),optIn=z.boolean().parse(b.optIn),aiConsent=optIn;
    if(aiConsent&&!optIn)fail('Showcase evaluation requires showcase opt-in.');
    const result=await db.prepare("UPDATE works SET showcase_opt_in=?,ai_showcase_consent=?,ai_assessment=CASE WHEN ? THEN ai_assessment ELSE '' END,ai_assessed_at=CASE WHEN ? THEN ai_assessed_at ELSE 0 END WHERE id=? AND author_id=? AND status NOT IN ('draft','withdrawn')").bind(optIn,aiConsent,aiConsent,aiConsent,workId,uid).run();if(!result.meta.changes)fail('Only your published writing can enter the showcase.',403);return json({ok:true});
   }
   if(['evaluateShowcase','pickShowcase','clearShowcase'].includes(action)){
    if(!isAdmin)fail('Administrator access is required.',403);
    if(action==='clearShowcase'){const day=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(b.day),reason=z.string().trim().min(5).max(500).parse(b.reason);await db.batch([db.prepare('DELETE FROM showcases WHERE day=?').bind(day),audit(day,reason)]);return json({ok:true});}
-   const workId=id(),work=await db.prepare('SELECT w.* FROM works w JOIN profiles p ON p.id=w.author_id WHERE w.id=? AND '+showcaseEligibility).bind(workId).first();if(!work)fail('This work is no longer eligible for the showcase.',409);
+   const workId=id(),work=await db.prepare('SELECT w.*,p.terms_version AS writer_terms_version FROM works w JOIN profiles p ON p.id=w.author_id WHERE w.id=? AND '+showcaseEligibility).bind(workId).first();if(!work)fail('This work is no longer eligible for the showcase.',409);
    if(action==='evaluateShowcase'){
-    if(!work.ai_showcase_consent)fail('The writer has not consented to Jev evaluation.',403);
+    if(work.writer_terms_version!==TERMS_VERSION)fail('The writer must accept the updated workshop terms before evaluation.',403);
     if(Number(work.ai_assessed_at)>now-86400000&&work.ai_assessment)return json({ok:true,assessment:JSON.parse(String(work.ai_assessment)),cached:true});
     await rateLimit(db,'jev-global',5,86400000,now);
     const assessment=await evaluateShowcase(String(work.content),String(work.request),process.env.VERCEL==='1'?request.headers.get('x-vercel-oidc-token'):null);
-    const result=await db.batch([db.prepare("UPDATE works SET ai_assessment=?,ai_assessed_at=? WHERE id=? AND ai_showcase_consent=true AND showcase_opt_in=true AND status NOT IN ('draft','withdrawn')").bind(JSON.stringify(assessment),now,workId),audit(workId,'Writer-consented Jev evaluation through Vercel AI Gateway.')]);if(!result[0].meta.changes)fail('Consent or availability changed during evaluation. The assessment was not saved.',409);
+    const result=await db.batch([db.prepare("UPDATE works SET ai_assessment=?,ai_assessed_at=? WHERE id=? AND showcase_opt_in=true AND status NOT IN ('draft','withdrawn')").bind(JSON.stringify(assessment),now,workId),audit(workId,'Jev showcase evaluation under accepted workshop terms.')]);if(!result[0].meta.changes)fail('Consent or availability changed during evaluation. The assessment was not saved.',409);
     return json({ok:true,assessment});
    }
    const day=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(b.day),date=Date.parse(day+'T00:00:00Z'),today=Date.parse(new Date(now).toISOString().slice(0,10)+'T00:00:00Z');
