@@ -155,6 +155,13 @@
       "when": 1791321951823,
       "tag": "0021_work-updates",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791323457827,
+      "tag": "0022_notify-queued-completion",
+      "breakpoints": true
     }
   ]
 }

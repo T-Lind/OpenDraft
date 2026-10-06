@@ -1,5 +1,15 @@
 // Called by the isolated PostgreSQL workshop suite; no real mail is sent.
 import assert from 'node:assert/strict';
+export async function testQueuedWorkUpdates({query,read,ok}){
+ await read('queued-updates-author');
+ await query("INSERT INTO works(id,author_id,author,title,genre,kind,stage,content,request,status,version,created_at,words,target_reviews) SELECT 'early-completion','queued-updates-author','Writer','Early feedback',genre,kind,stage,content,request,'queued',1,$1,words,1 FROM works WHERE id='the-last-light'",[Date.now()]);
+ await query("UPDATE works SET status='open' WHERE id='early-completion'");
+ ok((await query("SELECT COUNT(*)::int n FROM work_notifications WHERE work_id='early-completion' AND kind='completed'")).rows[0].n===0,'administrative queue removal cannot claim completed feedback');
+ await query("UPDATE works SET status='queued' WHERE id='early-completion'");
+ await query("INSERT INTO reviews(id,work_id,user_id,author,strengths,suggestions,overall,version,reward,created_at) VALUES('early-review','early-completion','updates-other','Reader','','','Useful early feedback',1,0,$1)",[Date.now()]);
+ await query("UPDATE works SET status='open' WHERE id='early-completion'");
+ ok((await query("SELECT COUNT(*)::int n FROM work_notifications WHERE work_id='early-completion' AND kind='completed'")).rows[0].n===1,'completion while still queued notifies the author');
+}
 export async function testWorkUpdates({query,read,identity,user,ok,cAction,bundles='tests'}){
  const api=await import('../.sites-runtime/'+bundles+'/updates.mjs'),mail=await import('../.sites-runtime/'+bundles+'/updateMail.mjs'),unsubscribe=await import('../.sites-runtime/'+bundles+'/unsubscribe.mjs'),cron=await import('../.sites-runtime/'+bundles+'/cronUpdates.mjs'),{database}=await import('../.sites-runtime/'+bundles+'/storage.mjs');
  const db=database();
@@ -18,11 +28,12 @@ export async function testWorkUpdates({query,read,identity,user,ok,cAction,bundl
  ok((await post('updates-reader',preference({reminderAt:now}))).status===400,'past reminders are rejected');
  ok((await get('updates-author','?workId=updates-work')).data.feedUpdates===true,'authors receive feed updates by default');
  ok((await get('updates-reader','?workId=updates-work')).data.feedUpdates===false,'reader subscriptions require opt-in');
- let r=await post('updates-reader',preference({feedUpdates:true,reminderAt:now+120000}));
- ok(r.status===200&&r.data.reminderAt===now+120000,'future reminder and feed subscription persist');
- await mail.enqueueReadingReminders(db,'updates-reader',now+60000);
+ const reminderTime=now+86400000;
+ let r=await post('updates-reader',preference({feedUpdates:true,reminderAt:reminderTime}));
+ ok(r.status===200&&r.data.reminderAt===reminderTime,'future reminder and feed subscription persist');
+ await mail.enqueueReadingReminders(db,'updates-reader',reminderTime-60000);
  ok((await get('updates-reader')).data.items.length===0,'reminders never fire before their due time');
- await Promise.all([mail.enqueueReadingReminders(db,'updates-reader',now+180000),mail.enqueueReadingReminders(db,'updates-reader',now+180000)]);
+ await Promise.all([mail.enqueueReadingReminders(db,'updates-reader',reminderTime+60000),mail.enqueueReadingReminders(db,'updates-reader',reminderTime+60000)]);
  r=await get('updates-reader');ok(r.data.items.length===1&&r.data.items[0].kind==='reminder','concurrent reminder workers create one update');
  const reminder=r.data.items[0];
  ok((await post('updates-other',{action:'read',id:reminder.id})).status===404,'another member cannot mark your update seen');

@@ -38,6 +38,7 @@ try{
  const community=await import('../.sites-runtime/work-update-tests/community.mjs');
  const cAction=async(uid,body)=>identity.run(uid?user(uid):null,async()=>{const response=await community.POST(new Request('https://opendraft.test/api/community',{method:'POST',headers:{Origin:'https://opendraft.test','Content-Type':'application/json'},body:JSON.stringify(body)}));return{status:response.status,data:await response.json()};});
  await (await import('./work-updates.integration.mjs')).testWorkUpdates({query,read,identity,user,ok,cAction,bundles:'work-update-tests'});
+ await (await import('./work-updates.integration.mjs')).testQueuedWorkUpdates({query,read,ok});
  console.log(assertions+' work-update infrastructure assertions passed.');
 }finally{
  globalThis.fetch=originalFetch;
