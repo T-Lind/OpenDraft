@@ -15,6 +15,7 @@ import { circleProjection, changeCircleMembership, manageCircle } from '@/lib/ci
 import { engagementInput,inspectCritique,manuscriptParagraphs,validQualityNote } from '@/lib/critique-quality';
 import {evaluateCritique} from '@/lib/jev';
 import {MIN_CRITIQUE_WORDS,CRITIQUE_CREDIT_RULE,critiqueState} from '@/lib/critique-rubric';
+import {scheduleWorkEmails} from '@/lib/work-updates';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -282,12 +283,12 @@ export async function POST(request: Request) {
       let assessment:Awaited<ReturnType<typeof evaluateCritique>>|null=null;
       let fingerprint='';
       if(count>=MIN_CRITIQUE_WORDS){
-        if(!w.jev_review_available)bad('Credits require a Jev check after the writer accepts the workshop terms. Your critique draft is safe.',403);
+        if(!w.jev_review_available)bad('Credits require a quality check after the writer accepts the workshop terms. Your critique draft is safe.',403);
         // Separate final-check budget: composer cadence must not block sharing.
         await rateLimit(db,'critique-credit-check:'+uid,60,86400000);
         await rateLimit(db,'critique-credit-check-global',1000,86400000);
         try{assessment=await evaluateCritique(w.content,w.request,draft,process.env.VERCEL==='1'?request.headers.get('x-vercel-oidc-token'):null,w);}
-        catch{bad('The final Jev credit check is unavailable. Your critique has not been posted and your draft is safe. Please try again.',503);}
+        catch{bad('The final quality credit check is unavailable. Your critique has not been posted and your draft is safe. Please try again.',503);}
         const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({version:w.version,state:critiqueState(w.content,w.request,draft,w)})));
         fingerprint=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
       }
@@ -307,7 +308,7 @@ export async function POST(request: Request) {
       ]);
       if (!critiqueResult[0].meta.changes) bad('The remaining requested critique spots are held by other readers, or this work changed. Your draft is safe; wait for a spot or try another work.', 409);
       const earned=Number(critiqueResult[0].results[0].reward);
-      actionNotice=earned ? `Critique shared. You earned ${earned.toLocaleString(undefined,{maximumFractionDigits:3})} credits.` : count<MIN_CRITIQUE_WORDS?'Critique shared. Thank you for helping this writer. This shorter critique earned no credits.':`Critique shared without credits. Jev average ${Number(assessment!.credit.mean!.toFixed(4))}/4; grounding ${assessment!.scores.grounding}/4; usefulness ${assessment!.scores.usefulness}/4. ${CRITIQUE_CREDIT_RULE}`;
+      actionNotice=earned ? `Critique shared. You earned ${earned.toLocaleString(undefined,{maximumFractionDigits:3})} credits.` : count<MIN_CRITIQUE_WORDS?'Critique shared. Thank you for helping this writer. This shorter critique earned no credits.':`Critique shared without credits. Quality average ${Number(assessment!.credit.mean!.toFixed(4))}/4; grounding ${assessment!.scores.grounding}/4; usefulness ${assessment!.scores.usefulness}/4. ${CRITIQUE_CREDIT_RULE}`;
     } else if(b.action==='annotationResponse'){
       const input=z.object({annotationId:z.string().max(100),status:z.enum(['open','resolved','kept','not-this-draft']),response:z.string().trim().max(500).default('')}).parse(b);
       const changed=await db.prepare('UPDATE annotations a SET writer_status=?,writer_response=? FROM works w WHERE a.id=? AND w.id=a.work_id AND w.author_id=?').bind(input.status,input.response,input.annotationId,uid).run();
@@ -419,6 +420,7 @@ export async function POST(request: Request) {
       await db.prepare('INSERT INTO feedback(id,user_id,email,kind,body,page,status,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), uid, user.email || '', kind, body, page, 'open', now).run();
     } else bad('Unknown workshop action.');
 
+    if(['publish','review','withdraw'].includes(String(b.action)))scheduleWorkEmails(db);
     return json({ ...(await snapshot(db, uid)), actionNotice, isAdmin: isAdminEmail(user.email), googleConfigured: googleConfigured(),emailPasswordConfigured:emailPasswordConfigured(),sourceRepositoryUrl:sourceRepositoryUrl() });
   } catch (e) {
     if (e instanceof z.ZodError) return json({ error: e.issues[0]?.message || 'Please check your submission.' }, 400);

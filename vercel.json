@@ -1,5 +1,11 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build:vercel",
-  "outputDirectory": ".next-vercel"
+  "outputDirectory": ".next-vercel",
+  "crons": [
+    {
+      "path": "/api/cron/work-updates",
+      "schedule": "0 12 * * *"
+    }
+  ]
 }

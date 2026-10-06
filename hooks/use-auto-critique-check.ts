@@ -1,8 +1,8 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import type {CritiqueDraft} from '@/lib/critique-quality';
-export const CRITIQUE_DEBOUNCE_MS=5000;
-export const CRITIQUE_MIN_INTERVAL_MS=30000;
+export const CRITIQUE_DEBOUNCE_MS=2000;
+export const CRITIQUE_MIN_INTERVAL_MS=2000;
 export function critiqueCheckDelay(now:number,lastStarted:number,retryAt=0){return Math.max(CRITIQUE_DEBOUNCE_MS,lastStarted?lastStarted+CRITIQUE_MIN_INTERVAL_MS-now:0,retryAt-now);}
 export function cleanCritiqueDraft(draft:CritiqueDraft):CritiqueDraft{return {...draft,annotations:draft.annotations.map(({kind,quote,body,para,start,end})=>({kind,quote,body,para,start,end}))};}
 type Assessment={scores:Record<string,number>;credit:{mean:number|null;eligible:boolean;policy:string};mock?:boolean};
@@ -29,10 +29,10 @@ export function useAutoCritiqueCheck(workId:string,version:number,draft:Critique
         const data=await response.json() as Assessment&{error?:string};
         if(disposed)return;
         if(!response.ok){
-          setState({key:payload,error:data.error||'Jev is unavailable. You can still share your critique.'});
+          setState({key:payload,error:data.error||'The quality check is unavailable. You can still share your critique.'});
           if(response.status===429||response.status>=500){
             const retry=Number(response.headers.get('Retry-After'));
-            retryAt=Date.now()+Math.max(60000,Number.isFinite(retry)&&retry>0?retry*1000:60000*2**retries);
+            retryAt=Date.now()+Math.max(response.status===429?2000:60000,Number.isFinite(retry)&&retry>0?retry*1000:60000*2**retries);
             if(retries++<2)schedule();
           }
           return;
@@ -40,7 +40,7 @@ export function useAutoCritiqueCheck(workId:string,version:number,draft:Critique
         completed.current=payload;setState({key:payload,result:data});
       }catch(e){
         if(disposed)return;
-        setState({key:payload,error:(e as Error).name==='AbortError'?'Jev took too long. You can still share your critique.':'Jev is unavailable. You can still share your critique.'});
+        setState({key:payload,error:(e as Error).name==='AbortError'?'The quality check took too long. You can still share your critique.':'The quality check is unavailable. You can still share your critique.'});
         retryAt=Date.now()+60000*2**retries;if(retries++<2)schedule();
       }finally{running=false;clearTimeout(deadline);}
     };

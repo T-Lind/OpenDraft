@@ -46,6 +46,7 @@ export type Snapshot = {
   sourceRepositoryUrl?:string;
   stats?:{works:number;words:number;given:number;received:number};
   unreadMessages?:number;
+  unreadUpdates?:number;
   revision?:number;
   actionNotice?:string;
 };
@@ -101,6 +102,7 @@ export default function Workshop() {
   const [feedbackKind, setFeedbackKind] = useState<'bug' | 'feature' | null>(null);
   const [revision,setRevision]=useState(0);
   const [detail,setDetail]=useState<{id:string;work:Work|null;loading:boolean;error:string}>({id:'',work:null,loading:false,error:''});
+  const [workUnread,setWorkUnread]=useState(0);
   const [notificationCount,setNotificationCount]=useState<number|null>(null);
   const [friendRequests,setFriendRequests]=useState(0);
   const [adminRequests,setAdminRequests]=useState({cases:0,legal:0});
@@ -247,12 +249,13 @@ export default function Workshop() {
   },[reading,selected,revision]);
   const notificationUserId=data.user?.id;
   useEffect(()=>{
-    if(!notificationUserId)return;let stopped=false;let lastCheck=0;let previous:string|null|undefined;const controller=new AbortController();
-    const check=async()=>{if(document.hidden||Date.now()-lastCheck<15_000)return;lastCheck=Date.now();try{const response=await fetch('/api/notifications',{signal:controller.signal,cache:'no-store'});if(!response.ok)return;const status=await response.json() as {friendRequests:number;adminRequests?:{cases:number;legal:number};unread:number;latest:{id:string;sender:string}|null};if(stopped)return;setNotificationCount(status.unread);setFriendRequests(status.friendRequests||0);setAdminRequests(status.adminRequests||{cases:0,legal:0});
+    if(!notificationUserId)return;let stopped=false;let lastCheck=0;let previous:string|null|undefined;let previousWork:string|null|undefined;const controller=new AbortController();
+    const check=async()=>{if(document.hidden||Date.now()-lastCheck<15_000)return;lastCheck=Date.now();try{const response=await fetch('/api/notifications',{signal:controller.signal,cache:'no-store'});if(!response.ok)return;const status=await response.json() as {friendRequests:number;adminRequests?:{cases:number;legal:number};unread:number;updatesUnread?:number;latestWorkUpdate?:string|null;latest:{id:string;sender:string}|null};if(stopped)return;setNotificationCount(status.unread);setWorkUnread(status.updatesUnread||0);
+      if(previousWork!==undefined&&previousWork!==status.latestWorkUpdate)setRevision(n=>n+1);previousWork=status.latestWorkUpdate||null;setFriendRequests(status.friendRequests||0);setAdminRequests(status.adminRequests||{cases:0,legal:0});
       if(previous!==undefined&&status.latest?.id&&previous!==status.latest.id&&status.unread){setToast('New message from '+status.latest.sender+'.');setRevision(n=>n+1);}previous=status.latest?.id||null;
     }catch{/* Keep the last badge during a temporary connection failure. */}};
-    void check();const timer=setInterval(()=>void check(),60_000);const focus=()=>void check();const friendChanged=()=>{lastCheck=0;void check();};window.addEventListener('opendraft:friends',friendChanged);window.addEventListener('opendraft:requests',friendChanged);window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus);
-    return()=>{stopped=true;controller.abort();clearInterval(timer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus);window.removeEventListener('opendraft:friends',friendChanged);window.removeEventListener('opendraft:requests',friendChanged);};
+    void check();const timer=setInterval(()=>void check(),60_000);const focus=()=>void check();const friendChanged=()=>{lastCheck=0;void check();};window.addEventListener('opendraft:friends',friendChanged);window.addEventListener('opendraft:requests',friendChanged);window.addEventListener('opendraft:updates',friendChanged);window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus);
+    return()=>{stopped=true;controller.abort();clearInterval(timer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus);window.removeEventListener('opendraft:friends',friendChanged);window.removeEventListener('opendraft:requests',friendChanged);window.removeEventListener('opendraft:updates',friendChanged);};
   },[notificationUserId]);
 
   const uid = data.user?.id;
@@ -324,7 +327,7 @@ export default function Workshop() {
           {primaryNav.map(({ icon: Icon, label, view: v }) => (
             <button key={label} className={'side-link' + (isNav(v) ? ' active' : '')} aria-current={isNav(v) ? 'page' : undefined} onClick={() => go(v)}>
               <Icon /><span>{label}</span>
-              {v === 'Messages' && unreadMessages > 0 && <span className="nav-badge">{unreadMessages}</span>}
+              {v === 'Messages' && unreadMessages+workUnread > 0 && <span className="nav-badge">{unreadMessages+workUnread}</span>}
               {v==='Friends'&&friendRequests>0&&<span className="nav-badge">{friendRequests}</span>}
               {v === 'Your account' && <ChevronRight className="side-caret" width={14} height={14} />}
             </button>
@@ -398,7 +401,7 @@ export default function Workshop() {
                         <span className="section-title tight" style={{ display: 'block' }}>Your critique credits</span>
                         <div className="credit-number">{formatCredits(credits)}<span>credits</span></div>
                         <p className="fine-print">A thoughtful critique goes a long way — for their draft, and for yours.</p>
-                        <div className="credit-rule"><Sparkles size={14} /><span>Eligible critiques earn <strong>1 credit</strong> at 175 words, then <strong>0.5 per extra 100 words</strong>. Jev average must exceed 2/4; grounding and usefulness must each reach 2/4. Shorter critiques are welcome without credits.</span></div>
+                        <div className="credit-rule"><Sparkles size={14} /><span>Eligible critiques earn <strong>1 credit</strong> at 175 words, then <strong>0.5 per extra 100 words</strong>. Quality average must exceed 2/4; grounding and usefulness must each reach 2/4. Shorter critiques are welcome without credits.</span></div>
                         <div className="credit-rule"><Feather size={14} /><span>Share a draft for <strong>5 credits</strong></span></div>
                         <button className="text-link" style={{ marginTop: 10 }} onClick={() => go('Credit history')}>A fair exchange <ChevronRight size={13} /></button>
                       </section>
@@ -498,7 +501,7 @@ export default function Workshop() {
           )}
 
           {view==='Friends'&&<FriendsView incomingRequests={friendRequests} onAuthor={openAuthor} onMessage={id=>go('Messages',id)}/>}
-          {view === 'Messages' && <MessagesView initialWith={selected} data={{...data,revision,unreadMessages}} act={act} busy={busy} onAuthor={openAuthor} onOpenStory={openStory} onUnreadChange={setNotificationCount} />}
+          {view === 'Messages' && <MessagesView initialWith={selected} data={{...data,revision,unreadMessages,unreadUpdates:workUnread}} act={act} busy={busy} onAuthor={openAuthor} onOpenStory={openStory} onUnreadChange={setNotificationCount} />}
           {view === 'My critiques' && <><FeedbackList reviews={given} data={data} act={act} busy={busy} onRead={openStory} received={false} onExplore={() => go('Explore')} onAuthor={openAuthor} /><PageMore page={givenPage} label="More critiques" /></>}
           {view === 'Analytics' && <><AnalyticsView analytics={data.analytics?{...data.analytics,works:analyticsPage.items}:null} own={own} onRead={openStory} onWrite={newDraft} /><PageMore page={analyticsPage} label="More reader stats" /></>}
           {view === 'Writing circles' && <div className="sheet"><div className="sheet-head"><h1>Writing circles</h1></div><div className="sheet-body"><Circles key={selected||'all'} initialSelected={selected} data={{...data,revision}} act={act} busy={busy} onOpenStory={openStory} onVisit={id=>go('Writing circles',id)}/></div></div>}
@@ -524,7 +527,7 @@ export default function Workshop() {
 
       <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
       <nav className="mobile-nav" aria-label="Mobile workshop navigation">
-        {[{ label: 'Home', view: 'Dashboard', icon: LayoutGrid, active: view === 'Dashboard' }, { label: 'Read', view: 'Explore', icon: BookOpen, active: ['Explore', 'Story', 'Read & critique'].includes(view) }, { label: 'Write', view: 'My writing', icon: FileText, active: ['My writing', 'Editor'].includes(view) }, { label: 'Inbox', view: 'Messages', icon: MessageSquare, active: view === 'Messages' }].map(({ label, view: destination, icon: Icon, active }) => <button key={label} type="button" className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} onClick={() => go(destination)}><span className="mobile-nav-icon"><Icon size={21}/>{destination === 'Messages' && unreadMessages > 0 && <span className="nav-badge" aria-label={`${unreadMessages} unread messages`}>{unreadMessages > 99 ? '99+' : unreadMessages}</span>}</span><span>{label}</span></button>)}
+        {[{ label: 'Home', view: 'Dashboard', icon: LayoutGrid, active: view === 'Dashboard' }, { label: 'Read', view: 'Explore', icon: BookOpen, active: ['Explore', 'Story', 'Read & critique'].includes(view) }, { label: 'Write', view: 'My writing', icon: FileText, active: ['My writing', 'Editor'].includes(view) }, { label: 'Inbox', view: 'Messages', icon: MessageSquare, active: view === 'Messages' }].map(({ label, view: destination, icon: Icon, active }) => <button key={label} type="button" className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} onClick={() => go(destination)}><span className="mobile-nav-icon"><Icon size={21}/>{destination === 'Messages' && unreadMessages+workUnread > 0 && <span className="nav-badge" aria-label={`${unreadMessages+workUnread} unread messages and work updates`}>{unreadMessages+workUnread > 99 ? '99+' : unreadMessages+workUnread}</span>}</span><span>{label}</span></button>)}
         <DialogTrigger asChild><button type="button" aria-label="More destinations" className={!['Dashboard', 'Explore', 'Story', 'Read & critique', 'My writing', 'Editor', 'Messages'].includes(view) ? 'active' : ''} onClick={() => { moreOrigin.current = view; }}><MoreHorizontal size={21}/><span>More</span></button></DialogTrigger>
       </nav>
         <DialogContent className="compact-dialog mobile-more-dialog" onCloseAutoFocus={event => { if (moreOrigin.current !== view) { event.preventDefault(); document.getElementById('main-content')?.focus({ preventScroll: true }); } }}>

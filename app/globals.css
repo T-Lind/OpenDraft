@@ -2587,3 +2587,11 @@ html[data-reduce-motion="true"] *, html[data-reduce-motion="true"] *::before, ht
  .writing-actions{flex-direction:row;flex-wrap:wrap;justify-content:flex-start;gap:10px 14px}
  .writing-row h2{overflow-wrap:anywhere}
 }
+
+.work-reading-options { position:relative; }
+.work-reading-options summary { cursor:pointer; list-style:none; }
+.work-reading-panel { position:absolute; z-index:30; top:calc(100% + 8px); left:0; width:min(390px,calc(100vw - 48px)); padding:20px; background:var(--sheet); border:1px solid var(--rule); border-radius:10px; box-shadow:0 8px 24px #0002; max-height:70vh; overflow:auto; }
+.work-reading-panel .fine-print { margin:8px 0 16px; }
+.work-reading-panel input[type=datetime-local] { width:100%; padding:8px; border:1px solid var(--rule); border-radius:5px; background:var(--sheet); color:inherit; }
+.work-reading-panel form { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+@media(max-width:700px) { .work-reading-panel { position:static; margin-top:8px; width:min(390px,calc(100vw - 48px)); } }

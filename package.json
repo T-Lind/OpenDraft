@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node tests/queue-forecast.test.mjs && node tests/queue-postgres.test.mjs && node tests/critique-quality.test.mjs && node tests/critique-check.test.mjs && node tests/critique-credit.test.mjs && node tests/auth.integration.mjs && node tests/avatar-history.test.mjs && node tests/workshop.integration.mjs",
     "test:auth": "node tests/auth.integration.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:work-updates": "node tests/work-updates.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

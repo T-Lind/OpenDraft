@@ -3,6 +3,8 @@ import {promoteSQL} from './reading-room';
 export async function deleteAccount(db:Database,uid:string){
  const now=Date.now();
  const statements=[
+ db.prepare('DELETE FROM work_notifications WHERE user_id=? OR work_id IN (SELECT id FROM works WHERE author_id=?) OR target_work_id IN (SELECT id FROM works WHERE author_id=?)').bind(uid,uid,uid),
+ db.prepare('DELETE FROM work_preferences WHERE user_id=? OR work_id IN (SELECT id FROM works WHERE author_id=?)').bind(uid,uid),
  db.prepare('DELETE FROM work_flow_events WHERE work_id IN (SELECT id FROM works WHERE author_id=?)').bind(uid),
  db.prepare('DELETE FROM critique_evidence WHERE user_id=? OR id IN (SELECT r.id FROM reviews r JOIN works w ON w.id=r.work_id WHERE w.author_id=?)').bind(uid,uid),
  db.prepare('DELETE FROM critique_credit_checks WHERE user_id=? OR id IN (SELECT r.id FROM reviews r JOIN works w ON w.id=r.work_id WHERE w.author_id=?)').bind(uid,uid),

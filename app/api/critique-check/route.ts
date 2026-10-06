@@ -21,7 +21,7 @@ export async function POST(request:Request) {
     const paragraphs=manuscriptParagraphs(work.content);
     if(input.draft.annotations.some(note=>!validQualityNote(note,paragraphs)))fail('A line note does not match this version. Revisit the note before checking.');
     if(![input.draft.overall,input.draft.strengths,input.draft.suggestions,...input.draft.annotations.map(a=>a.body)].some(s=>s.trim()))fail('Add some feedback before checking.');
-    await rateLimitCooldown(db,'critique-check-cadence:'+user.uid,30000);
+    await rateLimitCooldown(db,'critique-check-cadence:'+user.uid,2000);
     await rateLimit(db,'critique-check:'+user.uid,120,86400000);
     await rateLimit(db,'critique-check-global',1000,86400000);
     return json(await evaluateCritique(work.content,work.request,input.draft,process.env.VERCEL==='1'?request.headers.get('x-vercel-oidc-token'):null,work));

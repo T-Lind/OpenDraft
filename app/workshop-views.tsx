@@ -1,4 +1,6 @@
 'use client';
+import {WorkReadingOptions} from '@/components/work-reading-options';
+import {WorkUpdateFeed} from '@/components/work-update-feed';
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { BookOpen, Feather, Sparkles, FileText, MessageSquare, Users, Bookmark, Clock, ChevronRight, ChevronDown, Plus, Check, ArrowLeft, Flag, Download, Upload,Maximize2, LoaderCircle, Star, Highlighter, Strikethrough, MessageSquarePlus, X, CornerDownLeft, MapPin, ListChecks, Bold, Italic, Underline, Search, Send, AlertTriangle, Flame, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -595,7 +597,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
         <strong>{w.title}</strong>
       </div>
       <h1 className="write-title">Write a critique</h1>
-      <div className="reading-tools"><ReadingSettings/><button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button><button type="button" className="reading-settings-button" onClick={() => { critiqueRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'instant' : 'smooth', block: 'start' }); critiqueRef.current?.focus({ preventScroll: true }); }}><MessageSquare size={16}/>Jump to feedback</button></div>
+      <div className="reading-tools"><ReadingSettings/>{data.user&&!['draft','withdrawn'].includes(w.status)&&<WorkReadingOptions key={w.id+data.user.id} workId={w.id} uid={data.user.id} version={w.version}/>}<button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button><button type="button" className="reading-settings-button" onClick={() => { critiqueRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'instant' : 'smooth', block: 'start' }); critiqueRef.current?.focus({ preventScroll: true }); }}><MessageSquare size={16}/>Jump to feedback</button></div>
       {canAnnotate && <CritiqueReservation reservation={reservation} workId={w.id}/>}
       {canAnnotate && <ReadingPilot summary={engagement.summary} start={engagement.start} clear={engagement.clear}/>}
       {canAnnotate && !critiqueStorageAvailable && <p className="form-error" role="alert">Tab storage is unavailable. Keep this page open or copy your feedback elsewhere until you submit it; it cannot be recovered after a reload.</p>}
@@ -650,8 +652,8 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
                       <div className="critique-wordcount"><span>{totalWords} words</span><span>{totalWords >= MIN_REVIEW_WORDS ? critiqueCheck.current?.result?.credit.eligible===false?'Below quality requirement · 0 credits':`${formatCredits(reward)} potential credits` : 'Short critique · 0 credits'}</span></div>
                       <div className="word-progress"><span style={{ width: Math.min(100, (totalWords / MIN_REVIEW_WORDS) * 100) + '%' }} /></div>
                       <p className="fine-print">{CRITIQUE_CREDIT_RULE} Shorter critiques are welcome without credits.</p>
-                      <CritiqueQuality key={key} content={w.content} draft={critiqueDraft} enabled={qualityEnabled} check={critiqueCheck}/><p className="fine-print human-critique-reminder">Write your critique yourself. Generative AI may not write or rewrite it. Jev evaluates only.</p>
-                      <span className="disabled-wrap" title={!data.user ? 'Sign in to share a critique.' : !totalWords ? 'Add some feedback first. Short critiques are welcome.' : busy ? 'Sharing and checking credit eligibility…' : reward ? 'Credits depend on the final server Jev check.' : 'Share this shorter critique without earning credits.'}>
+                      <CritiqueQuality key={key} content={w.content} draft={critiqueDraft} enabled={qualityEnabled} check={critiqueCheck}/><p className="fine-print human-critique-reminder">Write your critique yourself. Generative AI may not write or rewrite it. The evaluator scores only.</p>
+                      <span className="disabled-wrap" title={!data.user ? 'Sign in to share a critique.' : !totalWords ? 'Add some feedback first. Short critiques are welcome.' : busy ? 'Sharing and checking credit eligibility…' : reward ? 'Credits depend on the final server quality check.' : 'Share this shorter critique without earning credits.'}>
                         <Button type="submit" className="primary-button submit-critique" disabled={busy || (!!data.user && !valid)}>{busy ? <LoaderCircle size={15} className="animate-spin" /> : <MessageSquare size={15} />} {data.user ? `${reward&&critiqueCheck.current?.result?.credit.eligible===false?'Share without credits':'Share your critique'}${localAnnotations.length ? ` (+${localAnnotations.length} line notes)` : ''}` : 'Sign in to critique'}</Button>
                       </span>
                       <p className="privacy-note">{w.critiqueVisibility==='private'?'Your critique is private between you and the writer.':'Your critique will be visible to workshop members.'}</p>
@@ -768,7 +770,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
             {(w.warning || w.mature || w.themes) && <div className="mature-note"><AlertTriangle size={13} /><strong>Content note:</strong> {[w.warning, w.themes].filter(Boolean).join(' · ')}</div>}
 
             <h2 className="section-title" style={{ marginTop: 20 }}>Read</h2>
-            <div className="reading-tools"><ReadingSettings/><button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button></div>
+            <div className="reading-tools"><ReadingSettings/>{data.user&&!['draft','withdrawn'].includes(w.status)&&<WorkReadingOptions key={w.id+data.user.id} workId={w.id} uid={data.user.id} version={w.version}/>}<button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button></div>
             <div className="reader-text story-read">{body.split('\n\n').map((p, i) => <p key={i}>{formatInline(p)}</p>)}</div>
             {!expanded && paragraphs.length > 2 && (
               <button className="continue-reading" onClick={() => setExpanded(true)}>Continue reading ({w.words.toLocaleString()} words) <ChevronDown size={14} /></button>
@@ -961,8 +963,8 @@ export function MessagesView({ data, act, busy, onAuthor, onOpenStory, onUnreadC
   return <div className="sheet wide messages-sheet">
     <div className="sheet-head"><h1>Messages</h1></div>
     <Tabs value={tab} onValueChange={setTab}>
-      <TabsList className="work-tabs"><TabsTrigger value="Inbox">Inbox{data.unreadMessages?<span className="tab-count">{data.unreadMessages}</span>:null}</TabsTrigger><TabsTrigger value="Critique feedback">Critique feedback</TabsTrigger></TabsList>
-      <TabsContent value="Inbox">
+      <TabsList className="work-tabs"><TabsTrigger value="Inbox">Inbox{data.unreadMessages?<span className="tab-count">{data.unreadMessages}</span>:null}</TabsTrigger><TabsTrigger value="Work updates">Work updates{data.unreadUpdates?<span className="tab-count">{data.unreadUpdates}</span>:null}</TabsTrigger><TabsTrigger value="Critique feedback">Critique feedback</TabsTrigger></TabsList>
+      <TabsContent value="Work updates">{tab==='Work updates'&&<WorkUpdateFeed revision={data.revision||0} onRead={onOpenStory}/>}</TabsContent><TabsContent value="Inbox">
         <div className="sheet-toolbar"><Button className="primary-button" onClick={()=>setCompose(true)}><Send size={14}/>New message</Button><span className="toolbar-spacer"/><Button variant="ghost" aria-label="Refresh messages" disabled={inbox.loading||thread.loading} onClick={refresh}><RefreshCw size={14}/>Refresh</Button></div>
         <div className={'message-layout'+(openWith?' has-conversation':'')}>
           <aside className="message-conversations" aria-label="Conversations">
@@ -1119,7 +1121,7 @@ export function Guide({ onExplore, onWrite, onAbout }: { onExplore: () => void; 
   return (
     <div className="guide">
       <div className="guide-steps">
-        {[{ number: '01', icon: BookOpen, title: 'Read something new.', body: 'Browse the reading room for stories, poems, and chapters looking for a fresh perspective. Every writer leaves a note about the feedback they need.' }, { number: '02', icon: MessageSquare, title: 'Give a thoughtful critique.', body: 'Leave line notes and as much prose as you like. Short feedback is welcome without credits. In the reading room, eligible critiques of at least 175 words earn 1 credit, plus 0.5 credits for every additional 100 words (0.005 per word). Jev average must exceed 2/4, with grounding and usefulness each at least 2/4. Share useful detail, without padding.' }, { number: '03', icon: Feather, title: 'Share your next draft.', body: 'Publishing costs 5 credits. Each genre keeps four works in its reading room; the rest wait in that genre’s queue, oldest first. After the requested critiques, a piece makes room for the next writer.' }].map(({ number, icon: Icon, title, body }) => (
+        {[{ number: '01', icon: BookOpen, title: 'Read something new.', body: 'Browse the reading room for stories, poems, and chapters looking for a fresh perspective. Every writer leaves a note about the feedback they need.' }, { number: '02', icon: MessageSquare, title: 'Give a thoughtful critique.', body: 'Leave line notes and as much prose as you like. Short feedback is welcome without credits. In the reading room, eligible critiques of at least 175 words earn 1 credit, plus 0.5 credits for every additional 100 words (0.005 per word). Quality average must exceed 2/4, with grounding and usefulness each at least 2/4. Share useful detail, without padding.' }, { number: '03', icon: Feather, title: 'Share your next draft.', body: 'Publishing costs 5 credits. Each genre keeps four works in its reading room; the rest wait in that genre’s queue, oldest first. After the requested critiques, a piece makes room for the next writer.' }].map(({ number, icon: Icon, title, body }) => (
           <article key={number}><span className="step-number">{number}</span><Icon size={22} /><h2>{title}</h2><p>{body}</p></article>
         ))}
       </div>

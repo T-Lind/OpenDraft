@@ -1,0 +1,11 @@
+'use client';
+import {useState} from 'react';
+import {usePagedList,PageMore} from './paged-list';
+import {Button} from './ui/button';
+const labels:Record<string,string>={reminder:'Your reading reminder',critique:'New feedback',revision:'New revision posted',readingRoom:'Now in the reading room',completed:'Requested critiques complete'};
+type Update={id:string;targetWorkId:string;title:string;targetTitle:string;kind:string;readAt:number|null;createdAt:number};
+export function WorkUpdateFeed({revision,onRead}:{revision:number;onRead:(id:string)=>void}){
+ const page=usePagedList<Update>('/api/work-updates?limit=30',true,revision),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const mark=async(input:{id:string}|{all:true})=>{setBusy(true);setError('');try{const response=await fetch('/api/work-updates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'read',...input})});if(!response.ok)throw new Error(((await response.json()) as {error?:string}).error);page.refresh();window.dispatchEvent(new Event('opendraft:updates'));}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
+ return <section aria-label="Work updates"><p className="fine-print">Follow a work or set a reminder from its Reading &amp; updates menu. Feedback on your own works appears here automatically.</p>{page.items.some(item=>!item.readAt)&&<Button variant="outline" disabled={busy} onClick={()=>void mark({all:true})}>Mark all updates seen</Button>}{error&&<p role="alert" className="form-error">{error}</p>}{page.items.map(item=><article className="community-case" key={item.id}><header><strong>{labels[item.kind]||'Work update'}</strong>{!item.readAt&&<span className="tag">New</span>}</header><button className="work-title" onClick={()=>{if(!item.readAt)void mark({id:item.id});onRead(item.targetWorkId);}}>{item.targetTitle}</button><p className="fine-print">{new Date(item.createdAt).toLocaleString()}</p>{!item.readAt&&<Button variant="ghost" disabled={busy} onClick={()=>void mark({id:item.id})}>Mark update seen</Button>}</article>)}{!page.loading&&!page.error&&!page.items.length&&<p>No work updates yet.</p>}<PageMore page={page} label="Earlier updates"/></section>;
+}

@@ -3,7 +3,7 @@ import {manuscriptParagraphs, type CritiqueDraft} from './critique-quality';
 export const CRITIQUE_RUBRIC = 'critique-substance-v2';
 export const CRITIQUE_CREDIT_POLICY = 'critique-credit-v1';
 export const MIN_CRITIQUE_WORDS = 175;
-export const CRITIQUE_CREDIT_RULE = 'Credits require 175 words, a Jev average above 2/4, and grounding and usefulness each at least 2/4.';
+export const CRITIQUE_CREDIT_RULE = 'Credits require 175 words, an automated check average above 2/4, and grounding and usefulness each at least 2/4.';
 export const critiqueCategories = ['grounding', 'relevance', 'rationale', 'usefulness'] as const;
 export type CritiqueScores = Record<typeof critiqueCategories[number], number>;
 export type CritiqueContext = {genre?:string;kind?:string;stage?:string};
