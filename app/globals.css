@@ -1945,7 +1945,7 @@ html.dark .pending-comment { background: #354c75; color: #e4edff; }
 .rich-manuscript:empty::before { pointer-events: none; }
 
 .stat-pill.streak { background: #b0552f; color: #fff; display: inline-flex; align-items: center; gap: 3px; }
-.streak-card strong { display: inline-flex; align-items: center; gap: 5px; }
+.streak-card strong { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
 .profile-streak { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--link); }
 .profile-streak b { font-size: 14px; }
 .admin-link { color: #7a4bb0; }
@@ -2594,6 +2594,19 @@ html[data-reduce-motion="true"] *, html[data-reduce-motion="true"] *::before, ht
 }
 
 .work-reading-options { position:relative; }
+.critique-drafts { margin-bottom: 16px; }
+.critique-drafts .sheet-head h2 { font: 700 22px/1.3 Georgia, "Times New Roman", serif; color: var(--ink); }
+.critique-drafts .sheet-body > .fine-print, .work-update-feed > .fine-print { line-height: 1.7; margin-bottom: 16px; }
+.critique-draft-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 16px 0; border-top: 1px solid var(--rule); }
+.critique-draft-copy { display: flex; flex: 1 1 220px; min-width: 0; flex-direction: column; gap: 5px; overflow-wrap: anywhere; }
+.critique-draft-copy strong { font-size: 14px; color: var(--ink); }
+.critique-draft-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.work-update-empty { padding: 24px 18px; border: 1px dashed var(--rule); border-radius: 5px; background: var(--surface-subtle); text-align: center; color: var(--ink-muted); }
+@media(max-width:700px) {
+ .critique-draft-row { flex-direction: column; align-items: stretch; }
+ .critique-draft-copy { flex-basis: auto; }
+ .critique-draft-actions > button { min-height: 44px; }
+}
 .work-reading-options summary { cursor:pointer; list-style:none; }
 .work-reading-panel { position:absolute; z-index:30; top:calc(100% + 8px); left:0; width:min(390px,calc(100vw - 48px)); padding:20px; background:var(--sheet); border:1px solid var(--rule); border-radius:10px; box-shadow:0 8px 24px #0002; max-height:70vh; overflow:auto; }
 .work-reading-panel .fine-print { margin:8px 0 16px; }
