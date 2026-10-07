@@ -3,7 +3,7 @@ import {manuscriptParagraphs, type CritiqueDraft} from './critique-quality';
 export const CRITIQUE_RUBRIC = 'critique-substance-v2';
 export const CRITIQUE_CREDIT_POLICY = 'critique-credit-v2';
 export const MIN_CRITIQUE_WORDS = 175;
-export const CRITIQUE_CREDIT_RULE = 'Credits require 175 words, all reading checks green, and an OpenDraft quality average above 2/4 with every category at least 2/4, while the work is in the reading room.';
+export const CRITIQUE_CREDIT_RULE = 'Credits require 175 words, completed reading checks, and an OpenDraft quality average above 2/4 with every category at least 2/4, while the work is in the reading room.';
 export const critiqueCategories = ['grounding', 'relevance', 'rationale', 'usefulness'] as const;
 export type CritiqueScores = Record<typeof critiqueCategories[number], number>;
 export type CritiqueContext = {genre?:string;kind?:string;stage?:string};

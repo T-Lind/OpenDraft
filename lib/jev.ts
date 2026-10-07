@@ -4,7 +4,7 @@ import type { CritiqueDraft } from './critique-quality';
 import {critiqueQuestions,critiqueState,critiqueCategories,critiqueCreditDecision,CRITIQUE_RUBRIC,type CritiqueContext,type CritiqueScores} from './critique-rubric';
 
 // A server-side switch covers every paid Gateway path, including OIDC fallback.
-function allowPaidCheck(){if(process.env.OPENDRAFT_PAID_CHECKS_ENABLED==='false')fail('OpenDraft quality checks are paused to keep usage free. You can share your critique without credits or return later.',503);}
+function allowPaidCheck(){if(process.env.OPENDRAFT_PAID_CHECKS_ENABLED==='false')fail('OpenDraft quality checks are currently unavailable. You can share your critique without credits or return later.',503);}
 
 export async function evaluateCritique(content:string,request:string,critique:CritiqueDraft,runtimeToken:string|null=null,context:CritiqueContext={}) {
  allowPaidCheck();

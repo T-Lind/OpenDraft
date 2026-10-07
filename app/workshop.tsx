@@ -403,7 +403,7 @@ export default function Workshop() {
                         <span className="section-title tight" style={{ display: 'block' }}>Your critique credits</span>
                         <div className="credit-number">{formatCredits(credits)}<span>credits</span></div>
                         <p className="fine-print">A thoughtful critique goes a long way — for their draft, and for yours.</p>
-                        <div className="credit-rule"><Sparkles size={14} /><span>Eligible critiques earn <strong>1 credit</strong> at 175 words, then <strong>0.5 per extra 100 words</strong>. All reading checks must be green. The OpenDraft quality average must exceed 2/4, with every category at least 2/4. Shorter critiques are welcome without credits.</span></div>
+                        <div className="credit-rule"><Sparkles size={14} /><span>Eligible critiques earn <strong>1 credit</strong> at 175 words, then <strong>0.5 per extra 100 words</strong>. Read the whole work carefully. The OpenDraft quality average must exceed 2/4, with every category at least 2/4. Shorter critiques are welcome without credits.</span></div>
                         <div className="credit-rule"><Feather size={14} /><span>Share a draft for <strong>5 credits</strong></span></div>
                         <button className="text-link" style={{ marginTop: 10 }} onClick={() => go('Credit history')}>A fair exchange <ChevronRight size={13} /></button>
                       </section>
