@@ -8,6 +8,8 @@ export const engagementInput = z.object({
   activeMs: ms, readingMs: ms, regionsMs: z.array(ms).length(REGION_COUNT),
 }).strict().refine(v => v.readingMs <= v.activeMs && v.regionsMs.every(n => n <= v.readingMs), 'Invalid reading summary.');
 export type Engagement = z.infer<typeof engagementInput>;
+export const READING_REGION_MS = 3000;
+export const readingComplete = (summary?:Engagement|null) => !!summary && summary.regionsMs.every(ms=>ms>=READING_REGION_MS);
 export type QualityNote = {kind:string; quote:string; body:string; para:number; start:number; end:number};
 export type CritiqueDraft = {overall:string; strengths:string; suggestions:string; annotations:QualityNote[]};
 export const critiqueDraftInput = z.object({

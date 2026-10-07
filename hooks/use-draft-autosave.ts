@@ -4,7 +4,7 @@ import { genres, workKinds, workStages, type Work } from '@/app/data';
 
 export type DraftSaveState = 'local' | 'waiting' | 'saving' | 'saved' | 'offline' | 'error' | 'conflict';
 type Recovery = { work: Work; savedAt: number; editedAt: number };
-export const draftFingerprint = (work: Work) => JSON.stringify([work.id, work.title.trim() || 'Untitled draft', work.genre, work.kind, work.stage, work.content, work.request, work.warning, !!work.mature, work.themes || '', work.targetReviews || 2, work.critiqueVisibility || 'public', work.revisionOf || null]);
+export const draftFingerprint = (work: Work) => JSON.stringify([work.id, work.title.trim() || 'Untitled draft', work.genre, work.kind, work.stage, work.content, work.request, work.warning, !!work.mature, work.themes || '', work.targetReviews || 2, work.critiqueVisibility || 'public', work.revisionOf || null, work.largerWork || '',work.partNumber || 1]);
 const prefix = (uid: string) => 'opendraft:draft:' + encodeURIComponent(uid) + ':';
 
 function recoveryFor(initial: Work): Recovery | null {

@@ -3,11 +3,11 @@ import {build} from 'esbuild';
 import {mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 mkdirSync('.sites-runtime/tests',{recursive:true});
-const context={user:{uid:'synthetic-reviewer',profile:{terms_version:'2026-10-06'}},work:{content:'The light stays on.\n\nThe narrator leaves.',request:'Does the final image work?',version:1,jev_review_available:false},rates:[],calls:[]};
+const context={user:{uid:'synthetic-reviewer',profile:{terms_version:'2026-10-06.2'}},work:{content:'The light stays on.\n\nThe narrator leaves.',request:'Does the final image work?',version:1,jev_review_available:false},rates:[],calls:[]};
 globalThis.__critiqueRouteTest=context;
 await build({entryPoints:['app/api/critique-check/route.ts'],outfile:'.sites-runtime/tests/critique-check-boundary.mjs',bundle:true,format:'esm',platform:'node',packages:'external',plugins:[{name:'boundary-adapters',setup(b){
  b.onResolve({filter:/^@\/(db\/storage|lib\/member|lib\/rate-limit)$/},args=>({path:args.path,namespace:'boundary'}));
- b.onLoad({filter:/.*/,namespace:'boundary'},args=>({contents:args.path==='@/db/storage'?'export const database=()=>({prepare:()=>({bind:()=>({first:async()=>globalThis.__critiqueRouteTest.work})})});':args.path==='@/lib/member'?`export const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status})};export const member=async()=>globalThis.__critiqueRouteTest.user;export const TERMS_VERSION='2026-10-06';export const requireTerms=(p)=>{if(p.terms_version!==TERMS_VERSION)throw Object.assign(new Error('Updated terms required'),{status:428})};`:'export const rateLimit=async(_,key)=>{globalThis.__critiqueRouteTest.rates.push(key)};export const rateLimitCooldown=rateLimit;',loader:'js'}));
+ b.onLoad({filter:/.*/,namespace:'boundary'},args=>({contents:args.path==='@/db/storage'?'export const database=()=>({prepare:()=>({bind:()=>({first:async()=>globalThis.__critiqueRouteTest.work})})});':args.path==='@/lib/member'?`export const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status})};export const member=async()=>globalThis.__critiqueRouteTest.user;export const TERMS_VERSION='2026-10-06.2';export const requireTerms=(p)=>{if(p.terms_version!==TERMS_VERSION)throw Object.assign(new Error('Updated terms required'),{status:428})};`:'export const rateLimit=async(_,key)=>{globalThis.__critiqueRouteTest.rates.push(key)};export const rateLimitCooldown=rateLimit;',loader:'js'}));
  b.onResolve({filter:/^@\//},args=>({path:resolve(args.path.slice(2)+'.ts')}));
  // Jev uses a relative import of member; route and evaluator share the same fail helper.
  b.onResolve({filter:/^\.\/member$/},()=>({path:'@/lib/member',namespace:'boundary'}));
@@ -21,10 +21,10 @@ try {
  process.env.AI_GATEWAY_API_KEY='synthetic-test-token';
  globalThis.fetch=async(url,options)=>{context.calls.push(JSON.parse(options.body));assert.equal(url,'https://ai-gateway.vercel.sh/v1/evaluate');return Response.json({answers:{grounding:{score:3.4},relevance:{score:3},rationale:{score:2},usefulness:{score:3}}});};
  assert.equal((await request(input,'https://evil.test')).status,403);
- context.user=null;assert.equal((await request(input)).status,401);context.user={uid:'synthetic-reviewer',profile:{terms_version:'2026-10-06'}};
+ context.user=null;assert.equal((await request(input)).status,401);context.user={uid:'synthetic-reviewer',profile:{terms_version:'2026-10-06.2'}};
  assert.equal((await request(input)).status,403,'writer must accept current terms');
  context.work.jev_review_available=true;
- context.user.profile.terms_version='old';assert.equal((await request(input)).status,428);context.user.profile.terms_version='2026-10-06';
+ context.user.profile.terms_version='old';assert.equal((await request(input)).status,428);context.user.profile.terms_version='2026-10-06.2';
  assert.equal((await request({...input,consent:false})).status,400);
  assert.equal((await request({...input,version:2})).status,409);
  assert.equal((await request({...input,draft:{...input.draft,annotations:[{...note,quote:'fake'}]}})).status,400);

@@ -35,7 +35,7 @@ export async function deleteAccount(db:Database,uid:string){
  db.prepare('DELETE FROM feedback WHERE user_id=?').bind(uid),
  db.prepare('DELETE FROM showcases WHERE work_id IN (SELECT id FROM works WHERE author_id=?)').bind(uid),
  // Keep a content-free withdrawn stub only as a reference for other writers' critiques.
- db.prepare("UPDATE works SET author_id='',author='Deleted writer',title='Writing removed by its author',content='',request='',status='withdrawn',words=0,warning='',themes='',mature=false,showcase_opt_in=false,ai_showcase_consent=false,ai_critique_consent=false,ai_assessment='',ai_assessed_at=0 WHERE author_id=?").bind(uid),
+ db.prepare("UPDATE works SET author_id='',author='Deleted writer',title='Writing removed by its author',larger_work='',part_number=1,content='',request='',status='withdrawn',words=0,warning='',themes='',mature=false,showcase_opt_in=false,ai_showcase_consent=false,ai_critique_consent=false,ai_assessment='',ai_assessed_at=0 WHERE author_id=?").bind(uid),
  db.prepare(promoteSQL)
  ];await db.batch(statements);
 }

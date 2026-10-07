@@ -1,8 +1,8 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import type {CritiqueDraft} from '@/lib/critique-quality';
-export const CRITIQUE_DEBOUNCE_MS=2000;
-export const CRITIQUE_MIN_INTERVAL_MS=2000;
+export const CRITIQUE_DEBOUNCE_MS=5000;
+export const CRITIQUE_MIN_INTERVAL_MS=5000;
 export function critiqueCheckDelay(now:number,lastStarted:number,retryAt=0){return Math.max(CRITIQUE_DEBOUNCE_MS,lastStarted?lastStarted+CRITIQUE_MIN_INTERVAL_MS-now:0,retryAt-now);}
 export function cleanCritiqueDraft(draft:CritiqueDraft):CritiqueDraft{return {...draft,annotations:draft.annotations.map(({kind,quote,body,para,start,end})=>({kind,quote,body,para,start,end}))};}
 type Assessment={scores:Record<string,number>;credit:{mean:number|null;eligible:boolean;policy:string};mock?:boolean};

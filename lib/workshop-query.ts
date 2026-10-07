@@ -7,7 +7,7 @@ import { TERMS_VERSION } from './workshop-policy';
 
 export type Row = Record<string, unknown>;
 export const camel = (row: Row): Row => Object.fromEntries(Object.entries(row).map(([key,value])=>[key.replace(/_([a-z])/g,(_,letter)=>letter.toUpperCase()),value]));
-export const workColumns = `w.id,w.author_id,w.author,w.title,w.genre,w.kind,w.stage,w.request,w.status,w.version,w.created_at,w.words,w.warning,w.mature,w.themes,w.target_reviews,w.critique_visibility,w.revision_of,w.showcase_opt_in,w.ai_showcase_consent,w.ai_process,(w.author_id LIKE 'sample-%' OR EXISTS(SELECT 1 FROM profiles jp WHERE jp.id=w.author_id AND jp.deleted_at=0 AND jp.terms_version='${TERMS_VERSION}')) AS jev_review_available`;
+export const workColumns = `w.id,w.author_id,w.author,w.title,w.genre,w.kind,w.stage,w.request,w.status,w.version,w.created_at,w.words,w.warning,w.mature,w.themes,w.target_reviews,w.critique_visibility,w.larger_work,w.part_number,w.revision_of,w.showcase_opt_in,w.ai_showcase_consent,w.ai_process,(w.author_id LIKE 'sample-%' OR EXISTS(SELECT 1 FROM profiles jp WHERE jp.id=w.author_id AND jp.deleted_at=0 AND jp.terms_version='${TERMS_VERSION}')) AS jev_review_available`;
 export const publicWork = "w.status NOT IN ('draft','withdrawn')";
 export const workExtras = `(SELECT COUNT(*) FROM reviews r WHERE r.work_id=w.id AND r.version=w.version)::int AS reviews,
  EXISTS(SELECT 1 FROM bookmarks b WHERE b.work_id=w.id AND b.user_id=?) AS bookmarked,
@@ -35,6 +35,12 @@ export async function queryCollection(db: Database, uid: string, params: URLSear
   const work=await db.prepare(`SELECT ${workColumns},w.content,${workExtras} FROM works w WHERE w.id=? AND (${publicWork} OR w.author_id=?)`).bind(uid,uid,id,uid).first();
   if(!work) throw Object.assign(new Error('This work is unavailable.'),{status:404});
   return {work:(await queueForecasts(db,[camel(work)]))[0]};
+ }
+ if(collection==='parts') {
+  const source=await db.prepare("SELECT author_id,larger_work FROM works WHERE id=? AND (author_id=? OR status NOT IN ('draft','withdrawn'))").bind(id,uid).first();
+  if(!source||!source.larger_work)return {items:[],nextCursor:null};
+  const parts=(await db.prepare("SELECT id,title,part_number,status FROM works WHERE author_id=? AND larger_work=? AND (author_id=? OR status NOT IN ('draft','withdrawn')) AND status<>'withdrawn'"+(cursor?' AND (part_number,id)>(?,?)':'')+" ORDER BY part_number,id LIMIT ?").bind(source.author_id,source.larger_work,uid,...afterValues,limit+1).all()).results;
+  const page=pageOf(parts,limit,row=>Number(row.part_number));return {...page,items:page.items.map(camel)};
  }
  if(collection==='works') {
   const mode=params.get('mode')||'explore';

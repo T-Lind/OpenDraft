@@ -12,9 +12,9 @@ import { promoteSQL } from '@/lib/reading-room';
 import {emailPasswordConfigured} from '@/lib/password-auth';
 import { changeReservation, availableCritiqueSlot } from '@/lib/critique-reservations';
 import { circleProjection, changeCircleMembership, manageCircle } from '@/lib/circle-access';
-import { engagementInput,inspectCritique,manuscriptParagraphs,validQualityNote } from '@/lib/critique-quality';
+import { engagementInput,inspectCritique,manuscriptParagraphs,validQualityNote,readingComplete } from '@/lib/critique-quality';
 import {evaluateCritique} from '@/lib/jev';
-import {MIN_CRITIQUE_WORDS,CRITIQUE_CREDIT_RULE,critiqueState} from '@/lib/critique-rubric';
+import {MIN_CRITIQUE_WORDS,critiqueState} from '@/lib/critique-rubric';
 import {scheduleWorkEmails} from '@/lib/work-updates';
 
 export const dynamic = 'force-dynamic';
@@ -159,7 +159,7 @@ export async function GET(request?: Request) {
   }
 }
 
-const workInput = z.object({ id: z.string().min(1).max(100), title: z.string().trim().min(1).max(120), genre: z.enum(genres.slice(1) as [string, ...string[]]), kind: z.enum(workKinds as [string, ...string[]]), stage: z.enum(['First draft', 'Second draft', 'Revision', 'Ready for a final look']), content: z.string().trim().min(1).max(50000), request: z.string().trim().min(5).max(800), warning: z.string().trim().max(300).default(''), mature: z.boolean().default(false), themes: z.string().trim().max(400).default(''), targetReviews: z.number().int().min(2).max(5).default(2), critiqueVisibility: z.enum(['public', 'private']).default('public'), aiProcess:z.enum(acceptedWritingProcessValues).default('not-declared'),revisionOf:z.string().min(1).max(100).nullable().default(null) });
+const workInput = z.object({ id: z.string().min(1).max(100), title: z.string().trim().min(1).max(120), genre: z.enum(genres.slice(1) as [string, ...string[]]), kind: z.enum(workKinds as [string, ...string[]]), stage: z.enum(['First draft', 'Second draft', 'Revision', 'Ready for a final look']), content: z.string().trim().min(1).max(50000), request: z.string().trim().min(5).max(800), warning: z.string().trim().max(300).default(''), mature: z.boolean().default(false), themes: z.string().trim().max(400).default(''), targetReviews: z.number().int().min(2).max(5).default(2), critiqueVisibility: z.enum(['public', 'private']).default('public'), aiProcess:z.enum(acceptedWritingProcessValues).default('not-declared'),largerWork:z.string().trim().max(120).default(''),partNumber:z.number().int().min(1).max(10000).default(1),revisionOf:z.string().min(1).max(100).nullable().default(null) });
 
 const annotationInput = z.object({
   kind: z.enum(['delete', 'insert', 'highlight', 'comment']),
@@ -182,6 +182,7 @@ const reviewInput = z.object({
   processDisclosure:z.literal('human-only').default('human-only'),
   attested:z.literal(true).default(true),
   engagement:engagementInput.optional(),
+  withoutCredits:z.boolean().default(false),
 }).strict();
 
 function bad(message: string, status = 400): never {
@@ -207,7 +208,7 @@ export async function POST(request: Request) {
     const raw = await request.text();
     if (raw.length > 410000) return json({ error: 'This submission is too large.' }, 413);
     const b = JSON.parse(raw);
-    if(!b||!['uploadAvatar','removeAvatar','saveDraft','autosaveDraft','publish','review','annotationResponse','bookmark','view','withdraw','join','createCircle','post','bulletin','profile','completeOnboarding','helpful','sendMessage','readMessage','report','feedback','updateWorkshop','addCircleReading','removeCircleReading','reserveCritique','renewCritique','releaseCritique','circleAccess','circleRequest','removeCircleMember'].includes(b.action))bad('Unknown workshop action.');
+    if(!b||!['uploadAvatar','removeAvatar','saveDraft','autosaveDraft','attachWork','publish','review','annotationResponse','bookmark','view','withdraw','join','createCircle','post','bulletin','profile','completeOnboarding','helpful','sendMessage','readMessage','report','feedback','updateWorkshop','addCircleReading','removeCircleReading','reserveCritique','renewCritique','releaseCritique','circleAccess','circleRequest','removeCircleMember'].includes(b.action))bad('Unknown workshop action.');
     if (b.action !== 'uploadAvatar' && raw.length > 200000) return json({ error: 'This submission is too large.' }, 413);
     const db = database();
     const user = await identity(db,b.action !== 'autosaveDraft');
@@ -221,7 +222,7 @@ export async function POST(request: Request) {
     if (!p) bad('Please sign in again.', 401);
     if (!['view', 'bookmark', 'readMessage'].includes(b.action)) await touchStreak(db, uid, now);
 
-    if(['publish','review','createCircle','join','post','bulletin','sendMessage','updateWorkshop','addCircleReading','reserveCritique','circleAccess','circleRequest','removeCircleMember'].includes(b.action))requireTerms(p!);
+    if(['attachWork','publish','review','createCircle','join','post','bulletin','sendMessage','updateWorkshop','addCircleReading','reserveCritique','circleAccess','circleRequest','removeCircleMember'].includes(b.action))requireTerms(p!);
     let actionNotice = '';
     if (['reserveCritique','renewCritique','releaseCritique'].includes(b.action)) {
       const workId=z.string().min(1).max(100).parse(b.workId);
@@ -246,7 +247,7 @@ export async function POST(request: Request) {
     } else if (b.action === 'publish') {
       const w = workInput.parse(b.work);
       const count = wordCount(w.content);
-      if (count > 4000) bad('Please split pieces over 4,000 words into chapters.');
+      if (count > 3500) bad('Each post can contain at most 3,500 words. Split longer works into linked chapters or parts.');
       const old = await db.prepare('SELECT * FROM works WHERE id=?').bind(w.id).first<{ author_id: string; status: string; created_at:number;version:number;revision_of:string|null }>();
       if (old && (old.author_id !== uid || old.status !== 'draft')) bad('Only your unpublished drafts can be edited here.', 403);
       const expected = b.expectedSavedAt === undefined ? undefined : z.number().int().nonnegative().parse(b.expectedSavedAt);
@@ -254,12 +255,12 @@ export async function POST(request: Request) {
       if(old&&(old.revision_of||null)!==w.revisionOf)bad('The source revision cannot be changed.',409);
       const version=old?Number(old.version):await revisionVersion(db,uid,w.revisionOf);
       const eventId='publish:'+w.id,cost=5+2*(w.targetReviews-2);
-      const vals=[w.id,uid,p.name,w.title,w.genre,w.kind,w.stage,w.content,w.request,'queued',version,now,count,w.warning,w.mature,w.themes,w.targetReviews,w.critiqueVisibility,w.revisionOf,w.aiProcess,eventId];
+      const vals=[w.id,uid,p.name,w.title,w.genre,w.kind,w.stage,w.content,w.request,'queued',version,now,count,w.warning,w.mature,w.themes,w.targetReviews,w.critiqueVisibility,w.revisionOf,w.aiProcess,w.largerWork,w.partNumber,eventId];
       const result=await db.batch([
         db.prepare('SELECT id FROM works WHERE id=? FOR UPDATE').bind(w.id),
         db.prepare(`INSERT INTO credit_events(id,user_id,amount,reason,created_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM profiles WHERE id=? AND credits>=? AND deleted_at=0 AND terms_version=?) AND NOT EXISTS(SELECT 1 FROM works WHERE id=? AND (author_id<>? OR status<>'draft' ${expected===undefined?'':'OR created_at<>?'}))`).bind(eventId,uid,-cost,'Published '+w.title,now,uid,cost,TERMS_VERSION,w.id,uid,...(expected===undefined?[]:[expected])),
         db.prepare('UPDATE profiles SET credits=credits-? WHERE id=? AND EXISTS(SELECT 1 FROM credit_events WHERE id=?)').bind(cost,uid,eventId),
-        db.prepare("INSERT INTO works(id,author_id,author,title,genre,kind,stage,content,request,status,version,created_at,words,warning,mature,themes,target_reviews,critique_visibility,revision_of,ai_process) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM credit_events WHERE id=?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,genre=excluded.genre,kind=excluded.kind,stage=excluded.stage,content=excluded.content,request=excluded.request,status=excluded.status,created_at=excluded.created_at,words=excluded.words,warning=excluded.warning,mature=excluded.mature,themes=excluded.themes,target_reviews=excluded.target_reviews,critique_visibility=excluded.critique_visibility,ai_process=excluded.ai_process WHERE works.author_id=excluded.author_id AND works.status='draft'").bind(...vals),
+        db.prepare("INSERT INTO works(id,author_id,author,title,genre,kind,stage,content,request,status,version,created_at,words,warning,mature,themes,target_reviews,critique_visibility,revision_of,ai_process,larger_work,part_number) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM credit_events WHERE id=?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,genre=excluded.genre,kind=excluded.kind,stage=excluded.stage,content=excluded.content,request=excluded.request,status=excluded.status,created_at=excluded.created_at,words=excluded.words,warning=excluded.warning,mature=excluded.mature,themes=excluded.themes,target_reviews=excluded.target_reviews,critique_visibility=excluded.critique_visibility,ai_process=excluded.ai_process,larger_work=excluded.larger_work,part_number=excluded.part_number WHERE works.author_id=excluded.author_id AND works.status='draft'").bind(...vals),
         db.prepare(promoteSQL)
       ]);
       if(!result[1].meta.changes)bad('Publication could not complete: your balance or draft changed. Your text is still here.',409);
@@ -282,7 +283,9 @@ export async function POST(request: Request) {
       const draft={overall:r.overall+(r.annotation?'\n\n'+(r.quote?'Selected passage: '+r.quote+'\n':'')+r.annotation:''),strengths:r.strengths,suggestions:r.suggestions,annotations:r.annotations};
       let assessment:Awaited<ReturnType<typeof evaluateCritique>>|null=null;
       let fingerprint='';
-      if(count>=MIN_CRITIQUE_WORDS){
+      const readingPassed=readingComplete(r.engagement);
+      if(!r.withoutCredits&&(count<MIN_CRITIQUE_WORDS||w.status!=='spotlight'||!readingPassed))bad(w.status!=='spotlight'?'This work is outside the reading room. Confirm sharing without credits.':'Read more carefully. Complete all reading checks and write at least 175 words, or confirm sharing without credits.',409);
+      if(!r.withoutCredits&&count>=MIN_CRITIQUE_WORDS){
         if(!w.jev_review_available)bad('Credits require a quality check after the writer accepts the workshop terms. Your critique draft is safe.',403);
         // Separate final-check budget: composer cadence must not block sharing.
         await rateLimit(db,'critique-credit-check:'+uid,60,86400000);
@@ -291,12 +294,13 @@ export async function POST(request: Request) {
         catch{bad('The final quality credit check is unavailable. Your critique has not been posted and your draft is safe. Please try again.',503);}
         const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({version:w.version,state:critiqueState(w.content,w.request,draft,w)})));
         fingerprint=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+        if(!assessment.credit.eligible)bad('Read more carefully. All OpenDraft quality checks must be green. Revise your critique, or confirm sharing without credits.',409);
       }
       const submittedAt=Date.now();
       const id = crypto.randomUUID();
       const annotationStatements = r.annotations.map(a => db.prepare('INSERT INTO annotations(id,review_id,work_id,user_id,author,kind,quote,body,para,start_pos,end_pos,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM reviews WHERE id=?)').bind(crypto.randomUUID(), id, r.workId, uid, p.name, a.kind, a.quote, a.body, a.para, a.start, a.end, now,id));
       const critiqueResult = await db.batch([
-        db.prepare(`INSERT INTO reviews(id,work_id,user_id,author,strengths,suggestions,overall,annotation,quote,process_disclosure,attested,version,reward,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,version,CASE WHEN ?<175 OR NOT ? THEN 0 ELSE ROUND(((CASE WHEN status='spotlight' THEN 1 ELSE 0.5 END)*(1+(?-175)*0.005))::numeric,3) END,? FROM works WHERE id=? AND version=? AND content=? AND request=? AND genre=? AND kind=? AND stage=? AND author_id=? AND author_id<>? AND status NOT IN ('draft','withdrawn') AND ${availableCritiqueSlot} RETURNING reward`).bind(id, r.workId, uid, p.name, r.strengths, r.suggestions, r.overall, r.annotation, r.quote,r.processDisclosure,r.attested,count,assessment?.credit.eligible??false,count,submittedAt,r.workId,w.version,w.content,w.request,w.genre,w.kind,w.stage,w.author_id,uid,submittedAt,uid),
+        db.prepare(`INSERT INTO reviews(id,work_id,user_id,author,strengths,suggestions,overall,annotation,quote,process_disclosure,attested,version,reward,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,version,CASE WHEN ?<175 OR NOT ? OR status<>'spotlight' THEN 0 ELSE ROUND((1+(?-175)*0.005)::numeric,3) END,? FROM works WHERE id=? AND version=? AND content=? AND request=? AND genre=? AND kind=? AND stage=? AND author_id=? AND author_id<>? AND status NOT IN ('draft','withdrawn') AND (? OR status='spotlight') AND ${availableCritiqueSlot} RETURNING reward`).bind(id, r.workId, uid, p.name, r.strengths, r.suggestions, r.overall, r.annotation, r.quote,r.processDisclosure,r.attested,count,assessment?.credit.eligible??false,count,submittedAt,r.workId,w.version,w.content,w.request,w.genre,w.kind,w.stage,w.author_id,uid,r.withoutCredits,submittedAt,uid),
         db.prepare('UPDATE profiles SET credits=credits+COALESCE((SELECT reward FROM reviews WHERE id=?),0) WHERE id=?').bind(id, uid),
         db.prepare('INSERT INTO credit_events(id,user_id,amount,reason,created_at) SELECT ?,?,reward,?,? FROM reviews WHERE id=? AND reward>0').bind(id, uid, 'Critiqued ' + w.title, now, id),
         ...(assessment?[db.prepare('INSERT INTO critique_credit_checks(id,user_id,assessment,created_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM reviews WHERE id=?)').bind(id,uid,JSON.stringify({...assessment,version:w.version,fingerprint}),submittedAt,id)]:[]),
@@ -308,11 +312,15 @@ export async function POST(request: Request) {
       ]);
       if (!critiqueResult[0].meta.changes) bad('The remaining requested critique spots are held by other readers, or this work changed. Your draft is safe; wait for a spot or try another work.', 409);
       const earned=Number(critiqueResult[0].results[0].reward);
-      actionNotice=earned ? `Critique shared. You earned ${earned.toLocaleString(undefined,{maximumFractionDigits:3})} credits.` : count<MIN_CRITIQUE_WORDS?'Critique shared. Thank you for helping this writer. This shorter critique earned no credits.':`Critique shared without credits. Quality average ${Number(assessment!.credit.mean!.toFixed(4))}/4; grounding ${assessment!.scores.grounding}/4; usefulness ${assessment!.scores.usefulness}/4. ${CRITIQUE_CREDIT_RULE}`;
+      actionNotice=earned ? `Critique shared. You earned ${earned.toLocaleString(undefined,{maximumFractionDigits:3})} credits.` : 'Critique shared without credits. Thank you for helping this writer.';
     } else if(b.action==='annotationResponse'){
       const input=z.object({annotationId:z.string().max(100),status:z.enum(['open','resolved','kept','not-this-draft']),response:z.string().trim().max(500).default('')}).parse(b);
       const changed=await db.prepare('UPDATE annotations a SET writer_status=?,writer_response=? FROM works w WHERE a.id=? AND w.id=a.work_id AND w.author_id=?').bind(input.status,input.response,input.annotationId,uid).run();
       if(!changed.meta.changes)bad('Only the writer can update this revision note.',403);
+    } else if(b.action==='attachWork') {
+      const input=z.object({workId:z.string().min(1).max(100),largerWork:z.string().trim().max(120),partNumber:z.number().int().min(1).max(10000)}).parse(b);
+      const result=await db.prepare("UPDATE works SET larger_work=?,part_number=? WHERE id=? AND author_id=? AND status<>'withdrawn'").bind(input.largerWork,input.partNumber,input.workId,uid).run();
+      if(!result.meta.changes)bad('Only the author can attach this post to a larger work.',403);
     } else if (b.action === 'bookmark') {
       const id = z.string().max(100).parse(b.workId);
       if (!await db.prepare("SELECT id FROM works WHERE id=? AND status NOT IN ('draft','withdrawn')").bind(id).first()) bad('This work is unavailable.', 404);

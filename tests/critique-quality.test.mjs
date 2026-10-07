@@ -3,8 +3,9 @@ import {build} from 'esbuild';
 import {mkdirSync} from 'node:fs';
 mkdirSync('.sites-runtime/tests',{recursive:true});
 await build({entryPoints:['lib/critique-quality.ts'],outfile:'.sites-runtime/tests/quality.mjs',bundle:true,format:'esm',platform:'node',packages:'external'});
-const {engagementTick,engagementInput,inspectCritique,manuscriptParagraphs,validQualityNote}=await import('../.sites-runtime/tests/quality.mjs');
+const {readingComplete,engagementTick,engagementInput,inspectCritique,manuscriptParagraphs,validQualityNote}=await import('../.sites-runtime/tests/quality.mjs');
 const blank=()=>({consent:true,version:1,activeMs:0,readingMs:0,regionsMs:Array(12).fill(0)});
+assert.equal(readingComplete(null),false);assert.equal(readingComplete(blank()),false);assert.equal(readingComplete({...blank(),regionsMs:Array(12).fill(3000)}),true);assert.equal(readingComplete({...blank(),regionsMs:[2999,...Array(11).fill(3000)]}),false);
 let state=blank();
 for(const [visible,focused,idle,elapsed] of [[false,true,0,1000],[true,false,0,1000],[true,true,61000,1000],[true,true,0,300000]]) {
  assert.deepEqual(engagementTick(state,elapsed,visible,focused,idle,[0,1]),state,'hidden, unfocused, idle, and suspended intervals cannot inflate attention');

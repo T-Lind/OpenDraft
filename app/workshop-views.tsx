@@ -1,4 +1,5 @@
 'use client';
+import {WorkParts} from '@/components/work-parts';
 import {WorkReadingOptions} from '@/components/work-reading-options';
 import {WorkUpdateFeed} from '@/components/work-update-feed';
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
@@ -6,7 +7,7 @@ import { BookOpen, Feather, Sparkles, FileText, MessageSquare, Users, Bookmark, 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription,DialogHeader,DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Kbd } from '@/components/ui/kbd';
 import { Work, Review, Circle, genres, wordCount, workKinds, workStages, matureThemes, writingProcessOptions, writingProcessDescription, type WritingProcess, formatCredits, readingTimeLabel, WorkAnnotation, AnnotationKind, AuthorProfileData, WorkMessage, Analytics } from './data';
@@ -29,11 +30,12 @@ import { CircleWorkshop } from '@/components/circle-workshop';
 import { CircleMembers } from '@/components/circle-members';
 import { ContentThemeCheck } from '@/components/content-theme-check';
 import {QueueProgress} from '@/components/queue-progress';
-import {ReadingPilot,CritiqueQuality} from '@/components/critique-quality';
+import {ReadingChecks,CritiqueQuality} from '@/components/critique-quality';
 import {useAutoCritiqueCheck} from '@/hooks/use-auto-critique-check';
 import {MIN_CRITIQUE_WORDS,CRITIQUE_CREDIT_RULE} from '@/lib/critique-rubric';
 import {TERMS_VERSION} from '@/lib/workshop-policy';
 import {useReviewEngagement} from '@/hooks/use-review-engagement';
+import {readingComplete} from '@/lib/critique-quality';
 
 function FieldSelect({ label, value, options, change }: { label: string; value: string; options: string[]; change: (v: string) => void }) {
   return <label className="field-label">{label}<select className="form-select" value={value} onChange={e => change(e.target.value)}>{options.map(o => <option key={o}>{o}</option>)}</select></label>;
@@ -143,7 +145,7 @@ export function Editor({ initial, credits, act, busy, onDone, close, onSaved,rev
   const { work, update } = draft;
   const locked = busy || leaving;
   const count = wordCount(work.content);
-  const valid = !!work.title.trim() && !!work.content.trim() && work.request.trim().length >= 5 && count <= 4000;
+  const valid = !!work.title.trim() && !!work.content.trim() && work.request.trim().length >= 5 && count <= 3500;
   const themes = (work.themes || '').split(',').map(s => s.trim()).filter(Boolean);
   const toggleTheme = (t: string) => { const set = new Set(themes); if (set.has(t)) set.delete(t); else set.add(t); update('themes', Array.from(set).join(', ')); };
   const cost = 5 + 2 * ((work.targetReviews || 2) - 2);
@@ -174,11 +176,12 @@ export function Editor({ initial, credits, act, busy, onDone, close, onSaved,rev
       {!!initial.revisionOf&&<section className="revision-workspace"><div><p className="eyebrow">Writer-side revision loop</p><h2>Notes from the previous draft</h2><p>Keep feedback beside the draft and mark what you resolved. Reviewers do not see these private working statuses.</p></div>{revisionAnnotations.length?<div className="revision-note-list">{revisionAnnotations.map(note=><article className={'revision-note status-'+(note.writerStatus||'open')} key={note.id}><header><b>{note.kind==='comment'?'Comment':note.kind==='delete'?'Suggested cut':note.kind==='insert'?'Suggested addition':'Highlight'} · {note.author}</b><span className="tag">{(note.writerStatus||'open').replaceAll('-',' ')}</span></header>{note.quote&&<q>{note.quote}</q>}{note.body&&<p>{note.body}</p>}<Input aria-label={'Response to '+note.author} maxLength={500} placeholder="Private revision note (optional)" value={responses[note.id]??note.writerResponse??''} onChange={event=>setResponses(current=>({...current,[note.id]:event.target.value}))}/><div className="revision-note-actions"><Button type="button" size="sm" variant="outline" disabled={busy} onClick={()=>void respond(note,'open')}>Open</Button><Button type="button" size="sm" variant="outline" disabled={busy} onClick={()=>void respond(note,'resolved')}>Resolved</Button><Button type="button" size="sm" variant="outline" disabled={busy} onClick={()=>void respond(note,'kept')}>Keep as written</Button><Button type="button" size="sm" variant="outline" disabled={busy} onClick={()=>void respond(note,'not-this-draft')}>Not this draft</Button></div></article>)}</div>:<p className="fine-print">This version has no line notes yet. Broader critiques remain available in the comparison view.</p>}</section>}
       <fieldset className="editor-fields" disabled={locked || !!draft.recovery}>
       <label className="field-label">A title for your work<Input maxLength={120} autoFocus placeholder="Every story needs a beginning…" value={work.title} onChange={e => update('title', e.target.value)} /></label>
+      <div className="form-grid"><label className="field-label">Larger work <span className="optional">(optional)</span><Input maxLength={120} placeholder="Novel or collection title" value={work.largerWork||''} onChange={e=>update('largerWork',e.target.value)}/></label><label className="field-label">Chapter or part number<Input type="number" min={1} max={10000} value={work.partNumber||1} onChange={e=>update('partNumber',Math.max(1,Math.min(10000,Number(e.target.value)||1)))}/></label></div><p className="fine-print">Use the same larger-work title to link your chapters in order. Each post has its own feedback and a 3,500-word limit.</p>
       <div className="field-label">Your writing
         <RichTextEditor value={work.content} disabled={locked || !!draft.recovery} onChange={v => update('content', v)} placeholder="The first sentence is a small act of courage." ariaLabel="Your writing" />
       </div>
-      <div className={'word-meter ' + (count > 4000 ? 'over-limit' : '')}>
-        <span>{count.toLocaleString()} / 4,000 words · {readingTimeLabel(count)}</span>
+      <div className={'word-meter ' + (count > 3500 ? 'over-limit' : '')}>
+        <span>{count.toLocaleString()} / 3,500 words · {readingTimeLabel(count)}</span>
         <span>Private drafts are free. Nothing is published automatically.</span>
       </div>
       <label className="field-label">What would you like feedback on?<Textarea maxLength={800} placeholder="For example: Is the opening engaging? Does the dialogue feel natural?" value={work.request} onChange={e => update('request', e.target.value)} /></label>
@@ -534,7 +537,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
 
 const MIN_REVIEW_WORDS = MIN_CRITIQUE_WORDS;
 
-export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: { work: Work; data: Snapshot; act: Act; busy: boolean; back: () => void; onSignIn: () => void; onAuthor: (id: string) => void }) {
+export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRead }: { work: Work; data: Snapshot; act: Act; busy: boolean; back: () => void; onSignIn: () => void; onAuthor: (id: string) => void;onRead:(id:string)=>void }) {
   const [readingFocus, setReadingFocus] = useState(false);
   const critiqueRef = useRef<HTMLElement>(null);
   const manuscriptRef = useRef<HTMLElement>(null);
@@ -550,14 +553,27 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
   const reservation = useCritiqueReservation(w.id, canAnnotate, data.revision, w.version);
   const [critiqueStorageAvailable,setCritiqueStorageAvailable]=useState(true);
   const key = 'opendraft:temporary-critique:' + w.id + ':' + (uid || 'guest') + ':' + w.version;
-  const engagement=useReviewEngagement(key,w.version,w.content,manuscriptRef);
+  const engagement=useReviewEngagement(key,w.version,w.content,manuscriptRef,canAnnotate&&data.user?.termsVersion===TERMS_VERSION);
   const qualityEnabled=canAnnotate&&data.user?.termsVersion===TERMS_VERSION&&!!w.jevReviewAvailable;
   const critiqueDraft={...form,annotations:localAnnotations};
   const critiqueCheck=useAutoCritiqueCheck(w.id,w.version,critiqueDraft,qualityEnabled);
 
   // Restore this writer's temporary browser draft after hydration or a work change.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory()); try { const text = sessionStorage.getItem(key); if (text) { const parsed = JSON.parse(text) as typeof form & { annotations?: WorkAnnotation[] }; setForm({ overall: parsed.overall || '', strengths: parsed.strengths || '', suggestions: parsed.suggestions || '' }); setHistory(annotationHistory(Array.isArray(parsed.annotations) ? parsed.annotations.filter(a => a.workId === w.id && a.userId === uid && a.id.startsWith('local-')) : [])); } } catch { /* ignore */ } }, [key, w.id, uid]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Restore this account's persisted browser draft after hydration.
+    setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory());
+    try {
+      const text=localStorage.getItem(key)||sessionStorage.getItem(key);
+      if(text){
+        const parsed=JSON.parse(text) as typeof form & {annotations?:WorkAnnotation[]};
+        const safe=(value:unknown)=>typeof value==='string'?value.slice(0,12000):'';
+        const restored={overall:safe(parsed.overall),strengths:safe(parsed.strengths),suggestions:safe(parsed.suggestions)};
+        const annotations=Array.isArray(parsed.annotations)?parsed.annotations.filter(a=>a.workId===w.id&&a.userId===uid&&typeof a.id==='string'&&a.id.startsWith('local-')).slice(0,300):[];
+        setForm(restored);setHistory(annotationHistory(annotations));
+        localStorage.setItem(key,JSON.stringify({...restored,annotations,workId:w.id,title:w.title,version:w.version,updatedAt:Date.now()}));
+      }
+    }catch{setCritiqueStorageAvailable(false);}
+  },[key,w.id,w.title,w.version,uid]);
 
   useEffect(() => {
     if (!uid || own || tracked.current === w.id) return;
@@ -565,18 +581,20 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
     void fetch('/api/workshop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'view', workId: w.id }) }).catch(() => { /* ignore */ });
   }, [uid, own, w.id]);
 
-  const update = (name: string, value:string|boolean) => { const next={...form,[name]:value};setForm(next);try { sessionStorage.setItem(key, JSON.stringify({ ...next, annotations: localAnnotations }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); } };
+  const update = (name: string, value:string|boolean) => { const next={...form,[name]:value};setForm(next);try { localStorage.setItem(key, JSON.stringify({ ...next, annotations: localAnnotations,workId:w.id,title:w.title,version:w.version,updatedAt:Date.now() }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); } };
   const changeHistory = (change: (current: AnnotationHistory<WorkAnnotation>) => AnnotationHistory<WorkAnnotation>) => {
     const next = change(history); setHistory(next);
-    try { sessionStorage.setItem(key, JSON.stringify({ ...form, annotations: next.present }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); }
+    try { localStorage.setItem(key, JSON.stringify({ ...form, annotations: next.present,workId:w.id,title:w.title,version:w.version,updatedAt:Date.now() }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); }
   };
   const totalWords = wordCount(form.overall + ' ' + form.strengths + ' ' + form.suggestions + ' ' + localAnnotations.map(a => a.body).join(' '));
   const valid = totalWords > 0;
   const inRoom = w.status === 'spotlight';
-  const baseCredit = inRoom ? 1 : 0.5;
-  const perWord = inRoom ? 0.005 : 0.0025;
+  const baseCredit = inRoom ? 1 : 0;
+  const perWord = inRoom ? 0.005 : 0;
   const reward = totalWords < MIN_REVIEW_WORDS ? 0 : Math.round((baseCredit + (totalWords - MIN_REVIEW_WORDS) * perWord) * 1000) / 1000;
-  const submit = async () => { const payload = { ...form, attested:true, workId: w.id,version:w.version, ...(engagement.summary?{engagement:engagement.summary}:{}), annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, 'Critique shared.')) { try{sessionStorage.removeItem(key);}catch{/* The server submission succeeded even if tab storage is unavailable. */} setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory()); engagement.clear(); setFeedbackTab('All feedback'); } };
+  const [confirmNoCredits,setConfirmNoCredits]=useState(false);
+  const allGreen=readingComplete(engagement.summary)&&critiqueCheck.current?.result?.credit.eligible===true;
+  const submit = async (withoutCredits=false) => { if(!withoutCredits&&(!inRoom||totalWords<MIN_REVIEW_WORDS||!allGreen)){setConfirmNoCredits(true);return;} const payload = { ...form, withoutCredits, attested:true, workId: w.id,version:w.version, ...(engagement.summary?{engagement:engagement.summary}:{}), annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, 'Critique shared.')) { try{localStorage.removeItem(key);sessionStorage.removeItem(key);}catch{/* The server submission succeeded even if tab storage is unavailable. */} setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory()); engagement.clear(); setFeedbackTab('All feedback'); } };
   const saved = data.bookmarks.includes(w.id);
 
   const serverAnnotations: WorkAnnotation[] = (data.annotations || []).filter(a => a.workId === w.id).map(a => ({ ...a, start: a.startPos ?? a.start, end: a.endPos ?? a.end }));
@@ -599,9 +617,9 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
       <h1 className="write-title">Write a critique</h1>
       <div className="reading-tools"><ReadingSettings/>{data.user&&!['draft','withdrawn'].includes(w.status)&&<WorkReadingOptions key={w.id+data.user.id} workId={w.id} uid={data.user.id} version={w.version}/>}<button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button><button type="button" className="reading-settings-button" onClick={() => { critiqueRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'instant' : 'smooth', block: 'start' }); critiqueRef.current?.focus({ preventScroll: true }); }}><MessageSquare size={16}/>Jump to feedback</button></div>
       {canAnnotate && <CritiqueReservation reservation={reservation} workId={w.id}/>}
-      {canAnnotate && <ReadingPilot summary={engagement.summary} start={engagement.start} clear={engagement.clear}/>}
-      {canAnnotate && !critiqueStorageAvailable && <p className="form-error" role="alert">Tab storage is unavailable. Keep this page open or copy your feedback elsewhere until you submit it; it cannot be recovered after a reload.</p>}
-      <div className="reader-grid">
+      {canAnnotate && <ReadingChecks summary={engagement.summary}/>}
+      {canAnnotate && !critiqueStorageAvailable && <p className="form-error" role="alert">Browser draft storage is unavailable. Keep this page open or copy your feedback elsewhere until you submit it; it cannot be recovered after a reload.</p>}
+      <WorkParts key={w.id} work={w} onRead={onRead}/><div className="reader-grid">
         <div>
           <article ref={manuscriptRef} className="reader-manuscript">
             <div className="reader-kicker">
@@ -632,7 +650,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
           </article>
 
           <section ref={critiqueRef} tabIndex={-1} className="panel-card critique-composer-panel" style={{ marginTop: 16 }} aria-label="Your critique">
-            <div className="critique-panel-heading"><Sparkles size={16} /><h2>{own?'Feedback on your writing':'Your critique'}</h2>{!own&&<span className="reward-badge">{formatCredits(reward)} credits</span>}</div>
+            <div className="critique-panel-heading"><Sparkles size={16} /><h2>{own?'Feedback on your writing':'Your critique'}</h2>{!own&&<span className="reward-badge">{formatCredits(allGreen?reward:0)} credits</span>}</div>
             <p className="critique-intro">{own?'Critiques from readers of your writing.':`Your critique is for ${w.author}. Use the line tools, then add as much or as little prose as you like.`}</p>
             <Tabs value={own?'All feedback':feedbackTab} onValueChange={setFeedbackTab}>
               <TabsList className="feedback-tabs">
@@ -656,6 +674,8 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
                       <span className="disabled-wrap" title={!data.user ? 'Sign in to share a critique.' : !totalWords ? 'Add some feedback first. Short critiques are welcome.' : busy ? 'Sharing and checking credit eligibility…' : reward ? 'Credits depend on the final server quality check.' : 'Share this shorter critique without earning credits.'}>
                         <Button type="submit" className="primary-button submit-critique" disabled={busy || (!!data.user && !valid)}>{busy ? <LoaderCircle size={15} className="animate-spin" /> : <MessageSquare size={15} />} {data.user ? `${reward&&critiqueCheck.current?.result?.credit.eligible===false?'Share without credits':'Share your critique'}${localAnnotations.length ? ` (+${localAnnotations.length} line notes)` : ''}` : 'Sign in to critique'}</Button>
                       </span>
+                      <p className="fine-print" role="status">{critiqueStorageAvailable?'Critique draft autosaved on this browser. Return from My critiques to continue, even after closing this tab.':''}</p>
+                      <Dialog open={confirmNoCredits} onOpenChange={setConfirmNoCredits}><DialogContent><DialogHeader><DialogTitle>Share without credits?</DialogTitle><DialogDescription>{!inRoom?'This work is outside the reading room; credit earning is locked.':'Read more carefully. All reading and OpenDraft quality checks must be green, and your critique must reach 175 words, to earn credits.'} You can revise, or share this critique for zero credits.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={()=>setConfirmNoCredits(false)}>Keep reviewing</Button><Button type="button" disabled={busy} onClick={()=>{setConfirmNoCredits(false);void submit(true);}}>Confirm: share for zero credits</Button></DialogFooter></DialogContent></Dialog>
                       <p className="privacy-note">{w.critiqueVisibility==='private'?'Your critique is private between you and the writer.':'Your critique will be visible to workshop members.'}</p>
                     </form>}
               </TabsContent>
@@ -688,12 +708,12 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
               <table className="earnings">
                 <tbody>
                   <tr><td>Fewer than {MIN_REVIEW_WORDS} words</td><td>0 credits</td></tr>
-                  <tr><td>{MIN_REVIEW_WORDS} words or more {inRoom ? '(reading room)' : '(queue · half credit)'}</td><td className="credit-plus">{baseCredit} {baseCredit === 1 ? 'credit' : 'credits'}</td></tr>
+                  <tr><td>{MIN_REVIEW_WORDS} words or more {inRoom ? '(reading room)' : '(outside reading room · no credits)'}</td><td className="credit-plus">{baseCredit} {baseCredit === 1 ? 'credit' : 'credits'}</td></tr>
                   <tr><td>Each word over {MIN_REVIEW_WORDS}</td><td className="credit-plus">+{perWord}</td></tr>
-                  <tr><td>Every 100 additional words</td><td className="credit-plus">+{formatCredits(perWord * 100)} credits</td></tr>
+                  <tr><td>Per 100 extra words (same conversion)</td><td className="credit-plus">+{formatCredits(perWord * 100)} credits</td></tr>
                 </tbody>
-              </table>
-              {!inRoom && <p className="fine-print" style={{ marginTop: 8 }}>This work has left the reading room, so critiques earn half credit.</p>}
+              </table><p className="fine-print">The 100-word amount is another way to express the per-word rate, not an extra bonus.</p>
+              {!inRoom && <p className="fine-print" style={{ marginTop: 8 }}>Credit earning is locked because this work is outside the reading room. You can still share your saved critique for zero credits.</p>}
             </div>
           </div>
           <div className="panel-card">
@@ -725,7 +745,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor }: {
 
 /* ------------------------------------------------------------- Story page */
 
-export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics, onAnalytics,onChanged }: { work: Work; data: Snapshot; act: Act; busy: boolean; onCritique: () => void; onAuthor: (id: string) => void; analytics: Analytics | null; onAnalytics: () => void;onChanged?:()=>void }) {
+export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics, onAnalytics,onChanged,onRead }: { work: Work; data: Snapshot; act: Act; busy: boolean; onCritique: () => void; onAuthor: (id: string) => void; analytics: Analytics | null; onAnalytics: () => void;onChanged?:()=>void;onRead:(id:string)=>void }) {
   const [expanded, setExpanded] = useState(false);
   const [readingFocus, setReadingFocus] = useState(false);
   const reviews = data.reviews.filter(r => r.workId === w.id);
@@ -749,6 +769,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
         <button className={'row-action' + (saved ? ' is-saved' : '')} onClick={() => void act({ action: 'bookmark', workId: w.id, saved: !saved }, saved ? 'Bookmark removed.' : 'Work saved.')}><Bookmark size={13} fill={saved ? 'currentColor' : 'none'} />{saved ? 'Saved' : 'Save'}</button>
       </div>
       <div className="sheet-body">
+        <WorkParts key={w.id} work={w} onRead={onRead}/>
         <div className="story-head">
           <span className="story-kicker">{w.genre} · {w.kind}</span>
           <h1 className="story-title">{formatInline(w.title)}</h1>
@@ -1121,7 +1142,7 @@ export function Guide({ onExplore, onWrite, onAbout }: { onExplore: () => void; 
   return (
     <div className="guide">
       <div className="guide-steps">
-        {[{ number: '01', icon: BookOpen, title: 'Read something new.', body: 'Browse the reading room for stories, poems, and chapters looking for a fresh perspective. Every writer leaves a note about the feedback they need.' }, { number: '02', icon: MessageSquare, title: 'Give a thoughtful critique.', body: 'Leave line notes and as much prose as you like. Short feedback is welcome without credits. In the reading room, eligible critiques of at least 175 words earn 1 credit, plus 0.5 credits for every additional 100 words (0.005 per word). Quality average must exceed 2/4, with grounding and usefulness each at least 2/4. Share useful detail, without padding.' }, { number: '03', icon: Feather, title: 'Share your next draft.', body: 'Publishing costs 5 credits. Each genre keeps four works in its reading room; the rest wait in that genre’s queue, oldest first. After the requested critiques, a piece makes room for the next writer.' }].map(({ number, icon: Icon, title, body }) => (
+        {[{ number: '01', icon: BookOpen, title: 'Read something new.', body: 'Browse the reading room for stories, poems, and chapters looking for a fresh perspective. Every writer leaves a note about the feedback they need.' }, { number: '02', icon: MessageSquare, title: 'Give a thoughtful critique.', body: 'Leave line notes and as much prose as you like. Short feedback is welcome without credits. In the reading room, eligible critiques of at least 175 words earn 1 credit, plus 0.5 credits for every additional 100 words (0.005 per word). All reading checks must be green. The OpenDraft quality average must exceed 2/4, with every category at least 2/4. Share useful detail, without padding.' }, { number: '03', icon: Feather, title: 'Share your next draft.', body: 'Publishing costs 5 credits. Each genre keeps four works in its reading room; the rest wait in that genre’s queue, oldest first. After the requested critiques, a piece makes room for the next writer.' }].map(({ number, icon: Icon, title, body }) => (
           <article key={number}><span className="step-number">{number}</span><Icon size={22} /><h2>{title}</h2><p>{body}</p></article>
         ))}
       </div>
@@ -1135,7 +1156,7 @@ export function Guide({ onExplore, onWrite, onAbout }: { onExplore: () => void; 
           <section><h3>Attention is the currency.</h3><p>Everyone starts with five credits. You earn more by giving feedback. No subscriptions or paid shortcuts. A piece can receive one rewarded critique per reader.</p></section>
           <section><h3>Specific is kind.</h3><p>Show where a sentence sings, or where you lost the thread. Explain why. Offer possibilities. Respect the writer’s goals, their voice, and their ownership.</p></section>
           <section><h3>Your drafts belong to you.</h3><p>Private drafts are only visible to you. Published work and critiques are shared with workshop members. Export your writing and feedback at any time, or withdraw a work.</p></section>
-          <section><h3>Room for the next writer.</h3><p>Each genre’s reading room is a rotating list of four works, not a popularity contest; everything else waits in that genre’s queue. Posting is limited to 4,000 words per piece so reviewers can give it the attention it deserves.</p></section>
+          <section><h3>Room for the next writer.</h3><p>Each genre’s reading room is a rotating list of four works, not a popularity contest; everything else waits in that genre’s queue. Posting is limited to 3,500 words per post so reviewers can give it the attention it deserves.</p></section>
           <section><h3>Human judgment, honestly disclosed.</h3><p>Human writing and critique are the norm. AI-assisted manuscripts are discouraged but may be disclosed; reviewers must read the work and stand behind every point. OpenDraft uses member reports and human moderation, not unreliable AI detectors.</p></section>
         </div>
       </div>

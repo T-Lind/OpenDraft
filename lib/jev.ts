@@ -3,7 +3,11 @@ import { matureThemes } from '@/app/data';
 import type { CritiqueDraft } from './critique-quality';
 import {critiqueQuestions,critiqueState,critiqueCategories,critiqueCreditDecision,CRITIQUE_RUBRIC,type CritiqueContext,type CritiqueScores} from './critique-rubric';
 
+// A server-side switch covers every paid Gateway path, including OIDC fallback.
+function allowPaidCheck(){if(process.env.OPENDRAFT_PAID_CHECKS_ENABLED==='false')fail('OpenDraft quality checks are paused to keep usage free. You can share your critique without credits or return later.',503);}
+
 export async function evaluateCritique(content:string,request:string,critique:CritiqueDraft,runtimeToken:string|null=null,context:CritiqueContext={}) {
+ allowPaidCheck();
  const token=(process.env.AI_GATEWAY_API_KEY||runtimeToken||process.env.VERCEL_OIDC_TOKEN)?.trim();
  if(!token)fail('The optional quality check is not configured. You can still share your critique.',503);
  const response=await fetch('https://ai-gateway.vercel.sh/v1/evaluate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},signal:AbortSignal.timeout(15000),body:JSON.stringify({model:'typesafe-ai/jev',state:critiqueState(content,request,critique,context),questions:critiqueQuestions,providerOptions:{gateway:{disallowPromptTraining:true,only:['typesafe-ai']}}})});
@@ -14,6 +18,7 @@ export async function evaluateCritique(content:string,request:string,critique:Cr
 }
 
 export async function evaluateContentThemes(content:string,runtimeToken:string|null=null) {
+ allowPaidCheck();
  const token=(process.env.AI_GATEWAY_API_KEY||runtimeToken||process.env.VERCEL_OIDC_TOKEN)?.trim();
  if(!token)fail('The optional quality check is not configured. You can still select content notes and publish.',503);
  const descriptions=['physical violence, gore, or abuse','sexual activity or explicit sexual descriptions','strong profanity','drug or alcohol use or addiction','mental illness, self-harm, or suicidal themes','death, bereavement, or grief','traumatic experiences, sexual assault, or traumatic abuse','racism, discrimination, or hate directed at protected identities'];
@@ -26,6 +31,7 @@ export async function evaluateContentThemes(content:string,runtimeToken:string|n
  return {suggestions,model:'typesafe-ai/jev',rubric:'content-themes-v1'};
 }
 export async function evaluateShowcase(content:string,request:string,runtimeToken:string|null=null){
+ allowPaidCheck();
  const token=(process.env.AI_GATEWAY_API_KEY||runtimeToken||process.env.VERCEL_OIDC_TOKEN)?.trim();
  if(!token)fail('Automated evaluation needs Vercel AI Gateway authentication. Configure a server-only AI_GATEWAY_API_KEY or Vercel OIDC.',503);
  const response=await fetch('https://ai-gateway.vercel.sh/v1/evaluate',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},signal:AbortSignal.timeout(15000),body:JSON.stringify({

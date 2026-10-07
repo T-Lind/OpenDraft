@@ -27,6 +27,8 @@ import { usePagedList,PageMore } from '@/components/paged-list';
 import {AuthDialog} from '@/components/auth-dialog';
 import { ReadingSettings, ReadingAccountBridge, useReadingPreferences, prefersReducedMotion } from '@/components/reading-preferences';
 import { AccountReview } from '@/components/account-review';
+import {AttachWork} from '@/components/work-parts';
+import {CritiqueDrafts} from '@/components/critique-drafts';
 import { CritiquePilotReview } from '@/components/critique-quality';
 
 export type Snapshot = {
@@ -401,7 +403,7 @@ export default function Workshop() {
                         <span className="section-title tight" style={{ display: 'block' }}>Your critique credits</span>
                         <div className="credit-number">{formatCredits(credits)}<span>credits</span></div>
                         <p className="fine-print">A thoughtful critique goes a long way — for their draft, and for yours.</p>
-                        <div className="credit-rule"><Sparkles size={14} /><span>Eligible critiques earn <strong>1 credit</strong> at 175 words, then <strong>0.5 per extra 100 words</strong>. Quality average must exceed 2/4; grounding and usefulness must each reach 2/4. Shorter critiques are welcome without credits.</span></div>
+                        <div className="credit-rule"><Sparkles size={14} /><span>Eligible critiques earn <strong>1 credit</strong> at 175 words, then <strong>0.5 per extra 100 words</strong>. All reading checks must be green. The OpenDraft quality average must exceed 2/4, with every category at least 2/4. Shorter critiques are welcome without credits.</span></div>
                         <div className="credit-rule"><Feather size={14} /><span>Share a draft for <strong>5 credits</strong></span></div>
                         <button className="text-link" style={{ marginTop: 10 }} onClick={() => go('Credit history')}>A fair exchange <ChevronRight size={13} /></button>
                       </section>
@@ -438,7 +440,7 @@ export default function Workshop() {
                 <span>{works.length} {works.length === 1 ? 'work' : 'works'}{genreFilter !== 'All genres' && view === 'Explore' ? ` in ${genreFilter}` : ''}{search ? ` for “${search}”` : ''}</span>
                 <span className="result-tools">
                   {(search || (genreFilter !== 'All genres' && view === 'Explore')) && <button className="text-link" onClick={() => { setSearch(''); setGenreFilter('All genres'); }}><X size={12} />Clear filters</button>}
-                  <span className="fine-print"><span className="room-dot inline">◆</span> reading room (full credit) · queue (half credit)</span>
+                  <span className="fine-print"><span className="room-dot inline">◆</span> reading room (full credit) · outside reading room (zero credits)</span>
                 </span>
               </div>
               {view === 'Explore'
@@ -449,10 +451,10 @@ export default function Workshop() {
             </div>
           )}
 
-          {view === 'Story' && (selectedWork ? <StoryPage work={selectedWork} data={readerData} act={act} busy={busy} onCritique={() => go('Read & critique', selectedWork.id)} onAuthor={openAuthor} analytics={data.analytics} onAnalytics={() => go('Analytics')} onChanged={()=>{void load();setRevision(n=>n+1);}} /> : <div className="sheet"><div className="sheet-body">{detail.loading||detail.id!==selected?<p role="status">Loading this work…</p>:<Empty title="This story isn’t available." description={detail.error||'It may have been withdrawn by its writer.'} label="Back to the workshop" action={() => go('Explore')} />}</div></div>)}
+          {view === 'Story' && (selectedWork ? <StoryPage onRead={openStory} work={selectedWork} data={readerData} act={act} busy={busy} onCritique={() => go('Read & critique', selectedWork.id)} onAuthor={openAuthor} analytics={data.analytics} onAnalytics={() => go('Analytics')} onChanged={()=>{void load();setRevision(n=>n+1);}} /> : <div className="sheet"><div className="sheet-body">{detail.loading||detail.id!==selected?<p role="status">Loading this work…</p>:<Empty title="This story isn’t available." description={detail.error||'It may have been withdrawn by its writer.'} label="Back to the workshop" action={() => go('Explore')} />}</div></div>)}
 
           {view === 'Read & critique' && (selectedWork
-            ? <Reader key={selectedWork.id+':'+selectedWork.version} work={selectedWork} data={readerData} act={act} busy={busy} back={() => go('Story', selectedWork.id)} onSignIn={() => setLogin(true)} onAuthor={openAuthor} />
+            ? <Reader key={selectedWork.id+':'+selectedWork.version} onRead={id=>go('Read & critique',id)} work={selectedWork} data={readerData} act={act} busy={busy} back={() => go('Story', selectedWork.id)} onSignIn={() => setLogin(true)} onAuthor={openAuthor} />
             : <div className="sheet"><div className="sheet-body">{detail.loading||detail.id!==selected?<p role="status">Loading this work…</p>:<Empty title="This story isn’t available." description={detail.error||'It may have been withdrawn by its writer.'} label="Back to the workshop" action={() => go('Explore')} />}</div></div>)}
           {reading&&selectedWork&&<><PageMore page={reviewPage} label="More critiques" /><PageMore page={annotationPage} label="More line notes" /></>}
 
@@ -488,7 +490,7 @@ export default function Workshop() {
                       </div>
                       <div className="writing-actions">
                         <button className="row-action" onClick={() => w.status === 'draft' ? editDraft(w) : openStory(w.id)}><PenLine size={13} />{w.status === 'draft' ? 'Edit & publish' : 'Read feedback'}</button>
-                        {w.status !== 'draft' && <button className="row-action" onClick={() => go('Analytics')}><Eye size={13} />Reader stats</button>}
+                        {w.largerWork&&<span className="fine-print">{w.largerWork} · Part {w.partNumber||1}</span>}<AttachWork work={w} act={act} busy={busy}/>{w.status !== 'draft' && <button className="row-action" onClick={() => go('Analytics')}><Eye size={13} />Reader stats</button>}
                         {w.status !== 'draft' && <button className="row-action" onClick={() => void editDraft(w,true)}><FileText size={13} />New revision</button>}
                         {w.status !== 'draft' && <button className="row-action danger" title="Withdraw work" aria-label={'Withdraw ' + w.title} onClick={() => setWithdraw(w)}><X size={13} />Withdraw</button>}
                       </div>
@@ -502,7 +504,7 @@ export default function Workshop() {
 
           {view==='Friends'&&<FriendsView incomingRequests={friendRequests} onAuthor={openAuthor} onMessage={id=>go('Messages',id)}/>}
           {view === 'Messages' && <MessagesView initialWith={selected} data={{...data,revision,unreadMessages,unreadUpdates:workUnread}} act={act} busy={busy} onAuthor={openAuthor} onOpenStory={openStory} onUnreadChange={setNotificationCount} />}
-          {view === 'My critiques' && <><FeedbackList reviews={given} data={data} act={act} busy={busy} onRead={openStory} received={false} onExplore={() => go('Explore')} onAuthor={openAuthor} /><PageMore page={givenPage} label="More critiques" /></>}
+          {view === 'My critiques' && <>{uid&&<CritiqueDrafts uid={uid} onRead={id=>go('Read & critique',id)}/>}<FeedbackList reviews={given} data={data} act={act} busy={busy} onRead={openStory} received={false} onExplore={() => go('Explore')} onAuthor={openAuthor} /><PageMore page={givenPage} label="More critiques" /></>}
           {view === 'Analytics' && <><AnalyticsView analytics={data.analytics?{...data.analytics,works:analyticsPage.items}:null} own={own} onRead={openStory} onWrite={newDraft} /><PageMore page={analyticsPage} label="More reader stats" /></>}
           {view === 'Writing circles' && <div className="sheet"><div className="sheet-head"><h1>Writing circles</h1></div><div className="sheet-body"><Circles key={selected||'all'} initialSelected={selected} data={{...data,revision}} act={act} busy={busy} onOpenStory={openStory} onVisit={id=>go('Writing circles',id)}/></div></div>}
           {view === 'How it works' && <div className="sheet"><div className="sheet-head"><h1>How it works</h1></div><div className="sheet-body"><Guide onExplore={() => go('Explore')} onWrite={newDraft} onAbout={() => setAbout(true)} /></div></div>}
@@ -954,7 +956,7 @@ function QueueBlock({ items, saved, busy, onSave, onRead, onAuthor }: {
   return (
     <>
       <button type="button" className="queue-toggle" aria-expanded={open} onClick={() => setOpen(o => !o)}>
-        <ChevronDown size={13} style={{ transform: open ? 'rotate(180deg)' : 'none' }} />{open ? 'Hide' : 'See'} {items.length} in queue <span className="half-note">half credit</span>
+        <ChevronDown size={13} style={{ transform: open ? 'rotate(180deg)' : 'none' }} />{open ? 'Hide' : 'See'} {items.length} in queue <span className="half-note">zero credits</span>
       </button>
       {open && <div className="work-list" style={{ borderTop: 0 }}>{items.map(w => <WorkRow key={w.id} work={w} saved={saved.includes(w.id)} busy={busy} onSave={() => onSave(w.id, saved.includes(w.id))} onRead={() => onRead(w.id)} onAuthor={onAuthor} />)}</div>}
     </>

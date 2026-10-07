@@ -33,7 +33,7 @@ try{
  const sessionTime=Math.floor(Date.now()/1000);
  const user=id=>({userId:id,email:id+'@opendraft.test',fullName:id,displayName:id,issuedAt:sessionTime});
  const prepared=new Set();
- const read=async(id)=>identity.run(id?user(id):null,async()=>{const r=await api.GET();const data=await r.json();if(id&&!prepared.has(id)&&r.status===200){await query("UPDATE profiles SET terms_version='2026-10-06',terms_accepted_at=$1,onboarding_completed=CASE WHEN id='new-google-user' THEN false ELSE true END WHERE id=$2",[Date.now(),id]);prepared.add(id);}return{status:r.status,data}});
+ const read=async(id)=>identity.run(id?user(id):null,async()=>{const r=await api.GET();const data=await r.json();if(id&&!prepared.has(id)&&r.status===200){await query("UPDATE profiles SET terms_version='2026-10-06.2',terms_accepted_at=$1,onboarding_completed=CASE WHEN id='new-google-user' THEN false ELSE true END WHERE id=$2",[Date.now(),id]);prepared.add(id);}return{status:r.status,data}});
 
  const community=await import('../.sites-runtime/work-update-tests/community.mjs');
  const cAction=async(uid,body)=>identity.run(uid?user(uid):null,async()=>{const response=await community.POST(new Request('https://opendraft.test/api/community',{method:'POST',headers:{Origin:'https://opendraft.test','Content-Type':'application/json'},body:JSON.stringify(body)}));return{status:response.status,data:await response.json()};});
