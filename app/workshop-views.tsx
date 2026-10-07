@@ -35,6 +35,7 @@ import {useAutoCritiqueCheck} from '@/hooks/use-auto-critique-check';
 import {MIN_CRITIQUE_WORDS,CRITIQUE_CREDIT_RULE} from '@/lib/critique-rubric';
 import {TERMS_VERSION} from '@/lib/workshop-policy';
 import {useReviewEngagement} from '@/hooks/use-review-engagement';
+import {useFocusMode} from '@/hooks/use-focus-mode';
 import {readingComplete} from '@/lib/critique-quality';
 
 function FieldSelect({ label, value, options, change }: { label: string; value: string; options: string[]; change: (v: string) => void }) {
@@ -138,7 +139,8 @@ export function RichTextEditor({ value, onChange, placeholder, ariaLabel, disabl
 
 export function Editor({ initial, credits, act, busy, onDone, close, onSaved,revisionAnnotations=[] }: { initial: Work; credits: number; act: Act; busy: boolean; onDone: () => void; close: () => void; onSaved?:()=>void;revisionAnnotations?:WorkAnnotation[] }) {
   const [confirmPublish, setConfirmPublish] = useState(false), [leaving, setLeaving] = useState(false), [leaveAnyway, setLeaveAnyway] = useState(false);
-  const [focusMode,setFocusMode]=useState(false),[responses,setResponses]=useState<Record<string,string>>({});
+  const {active:focusMode,toggle:toggleFocusMode}=useFocusMode();
+  const [responses,setResponses]=useState<Record<string,string>>({});
   const [toolNotice,setToolNotice]=useState('');
   const importRef=useRef<HTMLInputElement>(null);
   const draft = useDraftAutosave(initial, busy || leaving || confirmPublish, onSaved);
@@ -168,7 +170,7 @@ export function Editor({ initial, credits, act, busy, onDone, close, onSaved,rev
   return (
     <form className={'editor-form'+(focusMode?' focus-mode':'')} onSubmit={e => { e.preventDefault(); void save(false); }}>
       {draft.recovery && <div className="draft-recovery" role="status"><div><strong>Unsaved changes found on this browser</strong><p>“{draft.recovery.work.title || 'Untitled draft'}” · {new Date(draft.recovery.editedAt).toLocaleString()}. Restore them, or keep the saved version.</p></div><Button type="button" onClick={draft.restore}>Restore changes</Button><Button type="button" variant="outline" onClick={draft.discardRecovery}>Keep current draft</Button></div>}
-      <div className="editor-tool-row"><Button type="button" variant="ghost" onClick={()=>setFocusMode(value=>!value)}><Maximize2 size={14}/>{focusMode?'Exit focus mode':'Focus mode'}</Button><input ref={importRef} hidden type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" onChange={event=>void importDraft(event.target.files?.[0])}/><Button type="button" variant="ghost" onClick={()=>importRef.current?.click()}><Upload size={14}/>Import .txt or .md</Button><Button type="button" variant="ghost" onClick={downloadDraft}><Download size={14}/>Export</Button></div>
+      <div className="editor-tool-row"><Button type="button" variant="ghost" className="focus-mode-toggle" aria-pressed={focusMode} onClick={toggleFocusMode}><Maximize2 size={14}/>{focusMode?'Exit focus mode':'Focus mode'}</Button><input ref={importRef} hidden type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" onChange={event=>void importDraft(event.target.files?.[0])}/><Button type="button" variant="ghost" onClick={()=>importRef.current?.click()}><Upload size={14}/>Import .txt or .md</Button><Button type="button" variant="ghost" onClick={downloadDraft}><Download size={14}/>Export</Button></div>
       {toolNotice&&<p className="editor-tool-notice" role="status">{toolNotice}</p>}
       <div className={'draft-save-status '+draft.state} role="status" aria-live="polite"><span>{draft.state==='saving'?<LoaderCircle size={14} className="animate-spin" />:draft.state==='saved'?<Check size={14}/>:<FileText size={14}/>} {status}</span>{draft.state==='saved'&&draft.savedAt>0&&<time dateTime={new Date(draft.savedAt).toISOString()}>Last saved {new Date(draft.savedAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</time>}</div>
       {draft.error && <div className="draft-save-error" role="alert"><p>{draft.error}</p>{draft.state==='conflict'?<Button type="button" variant="outline" onClick={() => setLeaveAnyway(true)}>Keep local copy &amp; reopen saved draft</Button>:<Button type="button" variant="outline" disabled={locked} onClick={() => void draft.retry()}>Retry save</Button>}<Button type="button" variant="outline" onClick={downloadDraft}>Download this draft</Button></div>}
@@ -177,7 +179,7 @@ export function Editor({ initial, credits, act, busy, onDone, close, onSaved,rev
       <fieldset className="editor-fields" disabled={locked || !!draft.recovery}>
       <label className="field-label">A title for your work<Input maxLength={120} autoFocus placeholder="Every story needs a beginning…" value={work.title} onChange={e => update('title', e.target.value)} /></label>
       <div className="form-grid"><label className="field-label">Larger work <span className="optional">(optional)</span><Input maxLength={120} placeholder="Novel or collection title" value={work.largerWork||''} onChange={e=>update('largerWork',e.target.value)}/></label><label className="field-label">Chapter or part number<Input type="number" min={1} max={10000} value={work.partNumber||1} onChange={e=>update('partNumber',Math.max(1,Math.min(10000,Number(e.target.value)||1)))}/></label></div><p className="fine-print">Use the same larger-work title to link your chapters in order. Each post has its own feedback and a 3,500-word limit.</p>
-      <div className="field-label">Your writing
+      <div className="field-label manuscript-field">Your writing
         <RichTextEditor value={work.content} disabled={locked || !!draft.recovery} onChange={v => update('content', v)} placeholder="The first sentence is a small act of courage." ariaLabel="Your writing" />
       </div>
       <div className={'word-meter ' + (count > 3500 ? 'over-limit' : '')}>
@@ -538,7 +540,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
 const MIN_REVIEW_WORDS = MIN_CRITIQUE_WORDS;
 
 export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRead }: { work: Work; data: Snapshot; act: Act; busy: boolean; back: () => void; onSignIn: () => void; onAuthor: (id: string) => void;onRead:(id:string)=>void }) {
-  const [readingFocus, setReadingFocus] = useState(false);
+  const {active:readingFocus,toggle:toggleReadingFocus}=useFocusMode();
   const critiqueRef = useRef<HTMLElement>(null);
   const manuscriptRef = useRef<HTMLElement>(null);
   const [form, setForm] = useState({ overall: '', strengths: '', suggestions: '' }), [report, setReport] = useState(false), [reason, setReason] = useState(''), [feedbackTab, setFeedbackTab] = useState('Write a critique');
@@ -615,7 +617,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRe
         <strong>{w.title}</strong>
       </div>
       <h1 className="write-title">Write a critique</h1>
-      <div className="reading-tools"><ReadingSettings/>{data.user&&!['draft','withdrawn'].includes(w.status)&&<WorkReadingOptions key={w.id+data.user.id} workId={w.id} uid={data.user.id} version={w.version}/>}<button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button><button type="button" className="reading-settings-button" onClick={() => { critiqueRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'instant' : 'smooth', block: 'start' }); critiqueRef.current?.focus({ preventScroll: true }); }}><MessageSquare size={16}/>Jump to feedback</button></div>
+      <div className="reading-tools"><ReadingSettings/>{data.user&&!['draft','withdrawn'].includes(w.status)&&<WorkReadingOptions key={w.id+data.user.id} workId={w.id} uid={data.user.id} version={w.version}/>}<button type="button" className="reading-settings-button focus-mode-toggle" aria-pressed={readingFocus} onClick={toggleReadingFocus}><Maximize2 size={16}/>{readingFocus ? 'Exit focus mode' : 'Focus on the text'}</button><button type="button" className="reading-settings-button" onClick={() => { critiqueRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'instant' : 'smooth', block: 'start' }); critiqueRef.current?.focus({ preventScroll: true }); }}><MessageSquare size={16}/>Jump to feedback</button></div>
       {canAnnotate && <CritiqueReservation reservation={reservation} workId={w.id}/>}
       {canAnnotate && !critiqueStorageAvailable && <p className="form-error" role="alert">Browser draft storage is unavailable. Keep this page open or copy your feedback elsewhere until you submit it; it cannot be recovered after a reload.</p>}
       <WorkParts key={w.id} work={w} onRead={onRead}/><div className="reader-grid">
@@ -746,7 +748,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRe
 
 export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics, onAnalytics,onChanged,onRead }: { work: Work; data: Snapshot; act: Act; busy: boolean; onCritique: () => void; onAuthor: (id: string) => void; analytics: Analytics | null; onAnalytics: () => void;onChanged?:()=>void;onRead:(id:string)=>void }) {
   const [expanded, setExpanded] = useState(false);
-  const [readingFocus, setReadingFocus] = useState(false);
+  const {active:readingFocus,toggle:toggleReadingFocus}=useFocusMode();
   const reviews = data.reviews.filter(r => r.workId === w.id);
   const annotations = (data.annotations || []).filter(a => a.workId === w.id);
   const uid = data.user?.id;
@@ -756,7 +758,7 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
   const workStats = own && analytics ? analytics.works.find(x => x.workId === w.id) : undefined;
   const paragraphs = w.content.split('\n\n');
   const preview = paragraphs.slice(0, 2).join('\n\n');
-  const body = expanded ? w.content : preview;
+  const body = expanded || readingFocus ? w.content : preview;
   return (
     <div className={'sheet wide story-sheet' + (readingFocus ? ' reading-focus' : '')}>
       <div className="sheet-toolbar story-toolbar">
@@ -790,9 +792,9 @@ export function StoryPage({ work: w, data, act, onCritique, onAuthor, analytics,
             {(w.warning || w.mature || w.themes) && <div className="mature-note"><AlertTriangle size={13} /><strong>Content note:</strong> {[w.warning, w.themes].filter(Boolean).join(' · ')}</div>}
 
             <h2 className="section-title" style={{ marginTop: 20 }}>Read</h2>
-            <div className="reading-tools"><ReadingSettings/>{data.user&&!['draft','withdrawn'].includes(w.status)&&<WorkReadingOptions key={w.id+data.user.id} workId={w.id} uid={data.user.id} version={w.version}/>}<button type="button" className="reading-settings-button" aria-pressed={readingFocus} onClick={() => setReadingFocus(value => !value)}><Maximize2 size={16}/>{readingFocus ? 'Show reading details' : 'Focus on the text'}</button></div>
+            <div className="reading-tools"><ReadingSettings/>{data.user&&!['draft','withdrawn'].includes(w.status)&&<WorkReadingOptions key={w.id+data.user.id} workId={w.id} uid={data.user.id} version={w.version}/>}<button type="button" className="reading-settings-button focus-mode-toggle" aria-pressed={readingFocus} onClick={toggleReadingFocus}><Maximize2 size={16}/>{readingFocus ? 'Exit focus mode' : 'Focus on the text'}</button></div>
             <div className="reader-text story-read">{body.split('\n\n').map((p, i) => <p key={i}>{formatInline(p)}</p>)}</div>
-            {!expanded && paragraphs.length > 2 && (
+            {!expanded && !readingFocus && paragraphs.length > 2 && (
               <button className="continue-reading" onClick={() => setExpanded(true)}>Continue reading ({w.words.toLocaleString()} words) <ChevronDown size={14} /></button>
             )}
 

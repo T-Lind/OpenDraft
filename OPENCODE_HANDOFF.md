@@ -1,4 +1,6 @@
-# Latest workshop changes (October 6, 2026)
+# Latest workshop changes (October 7, 2026)
+
+Writing, story reading, and critique reading share focus mode: surrounding navigation, header, footer, feedback buttons, and metadata disappear, while manuscript tools and an always-visible Exit focus mode control remain. A user click requests browser fullscreen when supported; denial falls back to the same clean layout. Button exit, Escape, browser fullscreen exit, and leaving the view restore the layout. Draft text and autosaving remain intact. Story focus displays the whole manuscript. Run npm run test:focus for fullscreen lifecycle and fallback checks.
 
 Posts are capped at 3,500 words on publishing; larger private drafts still autosave so writers do not lose text. Attach existing or new posts to a larger-work title and numbered part; parts are scoped to their author and ordered in the reader. Apply migration 0023_larger-works before deployment. Critique drafts and their version-specific reading checks persist in browser local storage, with a resume/discard list in My critiques. They do not sync between devices.
 

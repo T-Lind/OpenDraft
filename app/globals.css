@@ -2435,6 +2435,26 @@ html[data-reading-measure="narrow"] { --reading-measure: 52ch; }
 .reading-focus .reader-grid { grid-template-columns: minmax(0, 1fr); }
 .reading-focus .critique-panel { display: none; }
 .reading-focus .reader-manuscript { max-width: 900px; margin-inline: auto; }
+html[data-opendraft-focus="true"] { --mobile-nav-height: 0px; }
+html[data-opendraft-focus="true"] :is(.app-topbar, .sidebar, .mobile-nav, .site-footer, .feedback-fab, .skip-link, .toast:not(.toast-error)) { display: none !important; }
+html[data-opendraft-focus="true"] .main-shell { margin-left: 0; padding-top: 0; min-height: 100dvh; }
+html[data-opendraft-focus="true"] .main-shell main { max-width: 1000px; padding: 68px 24px 40px; }
+html[data-opendraft-focus="true"] .main-shell main > .sheet { max-width: 100%; border: 0; background: transparent; }
+html[data-opendraft-focus="true"] .main-shell main > .sheet > :is(.sheet-head, .sheet-toolbar) { display: none; }
+html[data-opendraft-focus="true"] .main-shell main > .sheet > .sheet-body { padding: 0; }
+.focus-mode-toggle[aria-pressed="true"] { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(24px, env(safe-area-inset-right)); z-index: 80; min-height: 40px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 2px 8px #0001; }
+.editor-form.focus-mode > :not(.editor-tool-row):not(.draft-save-status):not(.draft-save-error):not(.draft-recovery):not(fieldset) { display: none; }
+.editor-form.focus-mode fieldset > :not(.manuscript-field):not(.word-meter) { display: none; }
+.editor-form.focus-mode .editor-tool-row > :not(.focus-mode-toggle) { display: none; }
+.editor-form.focus-mode .word-meter > span + span { display: none; }
+.reader.reading-focus > :not(.reading-tools):not(.reader-grid) { display: none; }
+.reading-focus .reading-tools { margin: 0; }
+.reading-focus .reading-tools > :not(.focus-mode-toggle) { display: none; }
+.reading-focus .reader-manuscript { padding: 0; border: 0; background: transparent; width: 100%; }
+.reading-focus .reader-manuscript > :not(.reader-text):not(.manuscript-wrap):not(h1) { display: none; }
+.reading-focus .annotate-hint { display: none; }
+.reading-focus .sheet-body > .work-parts, .reading-focus .story-head > :not(.story-title) { display: none; }
+.reading-focus .story-grid > div > :not(.reading-tools):not(.story-read) { display: none; }
 .critique-composer-panel { scroll-margin-top: 64px; }
 [data-slot="dialog-content"].preferences-dialog { max-width: 560px !important; display: flex; flex-direction: column; overflow: hidden; }
 .preferences-dialog > [data-slot="dialog-title"], .preferences-dialog > [data-slot="dialog-description"] { flex-shrink: 0; padding-right: 30px; }
