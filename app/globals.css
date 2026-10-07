@@ -2438,7 +2438,7 @@ html[data-reading-measure="narrow"] { --reading-measure: 52ch; }
 .reading-settings-button { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 8px 11px; font-size: 12px; color: var(--ink); background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; }
 .reading-settings-button:hover, .reading-settings-button[aria-pressed="true"] { background: var(--accent); border-color: var(--link); }
 .reading-focus .reader-grid { grid-template-columns: minmax(0, 1fr); }
-.reading-focus .critique-panel { display: none; }
+.reading-focus .critique-panel, .reading-focus .critique-composer-panel { display: none; }
 .reading-focus .reader-manuscript { max-width: 900px; margin-inline: auto; }
 html[data-opendraft-focus="true"] { --mobile-nav-height: 0px; }
 html[data-opendraft-focus="true"] :is(.app-topbar, .sidebar, .mobile-nav, .site-footer, .feedback-fab, .skip-link, .toast:not(.toast-error)) { display: none !important; }
