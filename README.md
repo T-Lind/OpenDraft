@@ -1,5 +1,7 @@
 # Latest workshop changes (October 7, 2026)
 
+Focus-mode work titles align with the manuscript column and have space before the text. Annotation tools stay in a reserved 76px gutter with a 12px gap, including on phones, instead of covering passages. Focused manuscripts stay transparent in dark mode.
+
 OpenDraft's open-book icon uses the existing burgundy, cream, and terracotta palette. The editable source is public/opendraft-icon.svg, with a matching legacy favicon, a 512px PNG, and a 180px Apple touch icon. Root metadata uses the new icon URL.
 
 Writing, story reading, and critique reading share focus mode: surrounding navigation, header, footer, feedback buttons, and metadata disappear, while manuscript tools and an always-visible Exit focus mode control remain. A user click requests browser fullscreen when supported; denial falls back to the same clean layout. Button exit, Escape, browser fullscreen exit, and leaving the view restore the layout. Draft text and autosaving remain intact. Story focus displays the whole manuscript. Run npm run test:focus for fullscreen lifecycle and fallback checks.

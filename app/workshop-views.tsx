@@ -245,7 +245,7 @@ export function Editor({ initial, credits, act, busy, onDone, close, onSaved,rev
 /* --------------------------------------------------------------- Annotations */
 
 type ToolMode = 'menu' | 'comment';
-type Pending = { para: number; start: number; end: number; quote: string; collapsed: boolean; left: number; top: number; editorLeft: number; editorTop: number };
+type Pending = { para: number; start: number; end: number; quote: string; collapsed: boolean; top: number; editorLeft: number; editorTop: number };
 
 function offsetWithin(root: HTMLElement, node: Node, offset: number): number {
   let total = 0;
@@ -280,13 +280,12 @@ function selectionInfo(root: HTMLElement, plains: string[]): Pending | null {
   const collapsed = hi <= lo;
   const text = plains[para] || '';
   const rect = range.getBoundingClientRect();
-  const rootRect = root.getBoundingClientRect();
-  const toolbarLeft = rootRect.left >= 70 ? rootRect.left - 50 : Math.min(rect.right + 10, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 50);
-  const toolbarTop = Math.max(60, Math.min(rect.top, (typeof window !== 'undefined' ? window.innerHeight : 800) - 220));
+  const wrapRect = root.parentElement!.getBoundingClientRect();
+  // The rail stays in its reserved gutter, including on narrow screens and scroll.
+  const toolbarTop = Math.max(0, Math.min(rect.top - wrapRect.top, wrapRect.height - 232));
   return {
     para, start: lo, end: hi, collapsed,
     quote: collapsed ? '' : text.slice(lo, hi),
-    left: toolbarLeft,
     top: toolbarTop,
     editorLeft: Math.max(10, Math.min(rect.left, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 380)),
     editorTop: Math.max(60, Math.min(rect.bottom + 8, (typeof window !== 'undefined' ? window.innerHeight : 800) - 220)),
@@ -497,7 +496,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
   };
 
   return (
-    <div className="manuscript-wrap">
+    <div className={'manuscript-wrap' + (canAnnotate ? ' can-annotate' : '')}>
       {canAnnotate && (
         <div className="annotate-hint">
           <Highlighter size={13} />
@@ -511,7 +510,7 @@ export function AnnotatedManuscript({ content, isPoem, annotations, canAnnotate,
       </div>
 
       {pending && mode === 'menu' && (
-        <div className="annotate-rail" style={{ left: pending.left, top: pending.top }} role="toolbar" aria-label="Inline critique tools" onMouseDown={event => event.preventDefault()}>
+        <div className="annotate-rail" style={{ top: pending.top }} role="toolbar" aria-label="Inline critique tools" onMouseDown={event => event.preventDefault()}>
           <button type="button" className="annotate-rail-btn hl" aria-label="Highlight selected text" onClick={() => applyKind('highlight')} title="Highlight (H)"><Highlighter size={18} /><span>Highlight</span></button>
           <button type="button" className="annotate-rail-btn cm" aria-label="Comment on selected text" onClick={() => applyKind('comment')} title="Comment (C)"><MessageSquarePlus size={18} /><span>Comment</span></button>
           <button type="button" className="annotate-rail-btn del" aria-label="Suggest deletion" onClick={() => applyKind('delete')} title="Suggest deletion (D)"><Strikethrough size={18} /><span>Cut</span></button>
@@ -628,7 +627,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRe
               <span>{w.kind} · {w.stage}</span>
               {w.authorId.startsWith('sample-') && <span className="tag">Example story</span>}
             </div>
-            <h1>{w.title}</h1>
+            <div className={'manuscript-heading' + (canAnnotate ? ' can-annotate' : '')}><h1>{w.title}</h1></div>
             <div className="reader-byline">
               <WriterAvatar name={w.author} userId={w.authorId.startsWith('sample-') ? undefined : w.authorId} className="avatar peach" />
               <span>By <button className="author-link" onClick={() => onAuthor(w.authorId)}>{w.author}</button></span>
