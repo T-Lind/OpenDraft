@@ -46,7 +46,7 @@ const paged=(items,params)=>{const start=Number(params.get('cursor')||0),size=Nu
 createServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1:5182'),params=url.searchParams;const send=(data,status=200)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
  if(req.method==='POST'){
-  if(url.pathname==='/__fixture/near-expiry'){reservationClockOffset+=26*60000;send({ok:true});return;}
+  if(url.pathname==='/__fixture/near-expiry'){if(hold)reservationClockOffset=hold.expiresAt-Date.now()-4*60000;send({ok:true});return;}
   if(url.pathname==='/__fixture/draft-conflict'){for(const [key,d] of serverDrafts)serverDrafts.set(key,{...d,updatedAt:d.updatedAt+1,content:{...d.content,overall:'Another device has a different unfinished critique.'}});send({ok:true});return;}
   if(url.pathname==='/__fixture/expire-hold'){reservationClockOffset+=31*60000;send({ok:true});return;}
   if(url.pathname==='/__fixture/fail-save'){failSave=true;send({ok:true});return;}
