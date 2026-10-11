@@ -284,7 +284,9 @@ export async function POST(request: Request) {
       let assessment:Awaited<ReturnType<typeof evaluateCritique>>|null=null;
       let fingerprint='';
       const readingPassed=readingComplete(r.engagement);
-      if(!r.withoutCredits&&(count<MIN_CRITIQUE_WORDS||w.status!=='spotlight'||!readingPassed))bad(w.status!=='spotlight'?'This work is outside the reading room. Confirm sharing without credits.':'Read more carefully. Complete all reading checks and write at least 175 words, or confirm sharing without credits.',409);
+      if(!r.withoutCredits&&w.status!=='spotlight')bad('This work has left the reading room. Your draft is safe; confirm sharing without credits.',409);
+      if(!r.withoutCredits&&count<MIN_CRITIQUE_WORDS)bad(`Credit eligibility requires at least 175 words; this critique has ${count}. Add detail or confirm sharing without credits.`,409);
+      if(!r.withoutCredits&&!readingPassed)bad('Focused manuscript visibility is incomplete. Return to the text with this tab active, or confirm sharing without credits. Visibility does not prove comprehension.',409);
       if(!r.withoutCredits&&count>=MIN_CRITIQUE_WORDS){
         if(!w.jev_review_available)bad('Credits require a quality check after the writer accepts the workshop terms. Your critique draft is safe.',403);
         // Separate final-check budget: composer cadence must not block sharing.
@@ -294,7 +296,7 @@ export async function POST(request: Request) {
         catch{bad('The final quality credit check is unavailable. Your critique has not been posted and your draft is safe. Please try again.',503);}
         const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({version:w.version,state:critiqueState(w.content,w.request,draft,w)})));
         fingerprint=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
-        if(!assessment.credit.eligible)bad('Read more carefully. All OpenDraft quality checks must be green. Revise your critique, or confirm sharing without credits.',409);
+        if(!assessment.credit.eligible)bad('The critique has not met the quality requirement: every category must reach 2/4 and the average must exceed 2/4. Review your scores and revise, or confirm sharing without credits.',409);
       }
       const submittedAt=Date.now();
       const id = crypto.randomUUID();

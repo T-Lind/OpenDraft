@@ -1,0 +1,32 @@
+.browse-refinements { margin: 16px 24px; padding: 14px; border: 1px solid var(--rule); border-radius: 10px; }
+.browse-refinements summary { cursor: pointer; font-weight: 600; min-height: 32px; }
+.browse-filter-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 12px 0; }
+.browse-filter-grid select { width: 100%; min-height: 44px; background: var(--panel,transparent); color: inherit; border: 1px solid var(--rule); border-radius: 6px; padding: 8px; }
+.next-steps { margin-bottom: 24px; }
+.next-step-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.next-step { padding: 16px; border: 1px solid var(--rule); border-radius: 10px; text-align: left; min-height: 70px; }
+.next-step span { display: block; font-size: 12px; margin-bottom: 6px; }
+.next-step strong { overflow-wrap: anywhere; }
+.larger-synopsis,.saved-critique-copy p,.critique-reply p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.larger-work-editor { margin: 20px 0; padding: 20px; border: 1px solid var(--rule); border-radius: 10px; }
+.chapter-list { list-style: none; padding: 0; margin-top: 24px; }
+.chapter-list > li { border-top: 1px solid var(--rule); padding: 18px 0; }
+.chapter-list strong { display: block; font-size: 12px; margin-bottom: 6px; }
+.chapter-list summary { cursor: pointer; min-height: 44px; padding: 8px 0; }
+.chapter-navigation { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.critique-thread { border-top: 1px solid var(--rule); padding-top: 12px; margin-top: 16px; }
+.critique-reply { padding: 14px; margin: 10px 0; border-left: 3px solid var(--rule); }
+.critique-reply small { display: block; font-size: 11px; margin: 4px 0; }
+.critique-sync { margin: 12px 0; padding: 12px; border: 1px solid var(--rule); border-radius: 8px; }
+.saved-critique-copy { max-height: 300px; overflow-y: auto; margin: 12px 0; }
+.credit-readiness { font-size: 13px; padding: 12px; border-left: 3px solid #a65a45; line-height: 1.6; }
+.reservation-warning { display: block; font-weight: 600; margin-top: 8px; }
+.publish-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; }
+.publish-summary dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+ .browse-filter-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .next-step-grid { grid-template-columns: 1fr; }
+ .browse-refinements { margin: 12px; }
+ .critique-draft-actions { flex-wrap: wrap; }
+ .chapter-navigation > * { min-height: 44px; }
+}

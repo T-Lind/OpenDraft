@@ -1,4 +1,16 @@
-# Latest workshop changes (October 7, 2026)
+# Workshop refinements (October 10, 2026)
+
+Terms version 2026-10-10.1 explains private server autosave for unfinished critiques, conversations, and larger-work subscriptions. Updated acceptance is required before syncing feedback or sharing contributions.
+
+Larger works now have stable PostgreSQL identities, a synopsis, a chapter page with current and older versions, previous/next navigation, and opt-in feed subscriptions for new published chapters. Renaming from the larger-work page updates every linked chapter without losing subscriptions. Private chapter titles remain author-only. Migration 0024 backfills existing title-based groupings.
+
+Unfinished critiques autosave privately across devices with optimistic timestamps and browser recovery. Different copies require an explicit choice; reading visibility and quality results do not sync or authorize rewards. My critiques merges server drafts with browser copies and offers text export and confirmed discard. Successful submission clears the server draft atomically. Critique conversations inherit parent visibility, accept replies only from writer/reviewer, respect blocks, notify the other participant, and earn no credits. Export/deletion includes all new records.
+
+Browsing adds saved browser preferences for length, type, stage, request-text focus, and available spots. Reading room first is an explicit status/recency order. The dashboard brings unfinished critiques, unseen updates, and private drafts forward. Credit readiness distinguishes short feedback, pending/failed checks, incomplete visibility, and outside-room status without exposing a reading-region map. Holds warn in their final five minutes. Publish confirmation summarizes cost, requested critiques, visibility, content notes, and length; over-limit drafts explain the exact blocker.
+
+Email delivery remains disabled pending a verified sender; no paid setup was performed. The regular test command now includes work-update and workspace regression checks. Apply migration 0024 before running this code against an existing database.
+
+# Earlier workshop changes (October 7, 2026)
 
 Focus-mode work titles align with the manuscript column and have space before the text. Annotation tools stay in a reserved 76px gutter with a 12px gap, including on phones, instead of covering passages. Focused manuscripts stay transparent in dark mode.
 
@@ -6,7 +18,7 @@ OpenDraft's open-book icon uses the existing burgundy, cream, and terracotta pal
 
 Writing, story reading, and critique reading share focus mode: surrounding navigation, header, footer, feedback buttons, and metadata disappear, while manuscript tools and an always-visible Exit focus mode control remain. A user click requests browser fullscreen when supported; denial falls back to the same clean layout. Button exit, Escape, browser fullscreen exit, and leaving the view restore the layout. Draft text and autosaving remain intact. Story focus displays the whole manuscript. Run npm run test:focus for fullscreen lifecycle and fallback checks.
 
-Posts are capped at 3,500 words on publishing; larger private drafts still autosave so writers do not lose text. Attach existing or new posts to a larger-work title and numbered part; parts are scoped to their author and ordered in the reader. Apply migration 0023_larger-works before deployment. Critique drafts and their version-specific reading checks persist in browser local storage, with a resume/discard list in My critiques. They do not sync between devices.
+Posts are capped at 3,500 words on publishing; larger private drafts still autosave so writers do not lose text. Attach existing or new posts to a larger-work title and numbered part; parts are scoped to their author and ordered in the reader. Apply migration 0023_larger-works before deployment. Critique drafts sync privately across devices, with a resume/export/discard list and browser recovery. Reading visibility remains browser-local and version-specific.
 
 Terms version 2026-10-06.2 explains automatic focused visibility checks. All twelve regions must have at least three seconds of observed visibility; all four quality categories must be at least 2/4 and their raw average above 2/4; at least 175 words and reading-room status are also required for credits. Visibility cannot prove comprehension. Failed or missing checks prompt revision; explicitly confirming withoutCredits permits zero-credit submission and skips paid evaluation. Outside-room submissions always earn zero; the transaction checks current status. Server quality evaluation remains authoritative. Composer checks run after five seconds. Public interface uses OpenDraft and no pilot label. The 100-word amount is explicitly the per-word conversion, never an additional bonus.
 
@@ -17,14 +29,6 @@ Work reminders and subscriptions are implemented in migration 0021. Reading & up
 Email infrastructure uses Resend with verified recipients, per-work opt-in, signed one-click unsubscribe, durable event deduplication, delivery leases, bounded retries, and provider idempotency keys. No manuscript or critique text is emailed. Email stays unavailable without RESEND_API_KEY and AUTH_EMAIL_FROM; neither is configured yet. CRON_SECRET protects /api/cron/work-updates. Vercel cron runs daily at 12:00 UTC; active notification/feed requests materialize reminders and drain pending mail as well. Offline reminders are a daily fallback, not exact-time alarms. Real mail delivery remains unverified until a sender is configured. Run `npm run test:work-updates` for the focused database and mocked-mail checks.
 
 Displayed evaluation copy uses “quality checks” without provider model branding. The provider/model identifiers remain in server code and private credit audit metadata.
-
-# Current workshop policy (October 6, 2026)
-
-Jev processing is authorized by the current workshop terms, accepted once by writer and reviewer. Critique checks run after 2 seconds without edits, no more than once per 2 seconds. Four 0–4 categories are always visible; changed feedback clears old scores. The v2 rubric uses dimension-specific criteria. New earning critiques require at least 175 words, a fresh server Jev average strictly above 2/4, and grounding/usefulness each at least 2/4. Raw scores determine eligibility; client scores never do. Low-scoring feedback shares without credits; provider failure preserves the draft for retry. Migration 0019 stores private final credit decisions and text fingerprints, exported to the reviewer and deleted with either participant. Prior credit balances are unchanged. No per-work or per-check Jev consent controls remain. Critiques must be human-written; there is no AI process selector. Optional reading telemetry remains a separate voluntary pilot and never affects rewards.
-
-Queued works show a database-derived genre queue position and a broad estimate until all requested critiques. Migration 0018 records actual queue-to-room and room-to-completed transitions, excludes examples and administrative status changes without completed feedback, and starts a real observation window. Forecasts require at least a day of observation and three recent events at each stage; otherwise the UI says an estimate is unavailable. The previous notes below describe earlier iterations where they conflict with this section. Production Neon is migrated through 0022_notify-queued-completion (October 6, 2026).
-
-The v2 calibration report is in `tests/fixtures/critique-eval-broad-results.json`: 116 synthetic examples across 17 works, with 30 additional calls repeating ten difficult cases. All 111 supplied quality expectations matched on the final run. These are development labels, not an independent accuracy estimate; quality eligibility is separate from the 175-word minimum. The broader run exposed and corrected a usefulness loophole for one useful observation buried in generic filler. Run the free regression checks with `node tests/critique-credit.test.mjs` and `node tests/critique-check.test.mjs`. Live evaluation is opt-in and requires Gateway credentials: `node scripts/evaluate-critique.mjs --fixtures=tests/fixtures/critique-eval-broad.json --label=broad-review`. That command makes paid model requests; it does not post critiques or change credit balances.
 
 # OpenDraft
 
@@ -40,17 +44,12 @@ showcase choices remain human.
 
 ## What works
 
-- Optional review quality pilot: focused-tab and manuscript-visible time with a
-  twelve-region visibility map; exact repeated-sentence, anchored-comment spread,
-  and redline rationale hints. Recording starts only on reviewer opt-in; idle and
-  hidden time is excluded. Summaries are shared privately with the operator only
-  on critique submission, included in the reviewer’s export, and deleted with
-  either participant’s account. No time or coverage measure proves reading.
+- Focused manuscript visibility is measured privately for credit eligibility. Hidden and idle time is excluded; each of twelve regions must be visible for at least three seconds. Visibility cannot prove comprehension. Browser-local summaries are exported to the reviewer and removed on discard, submission, or account cleanup.
 - Automatic Jev critique checks under the current writer/reviewer workshop terms (grounding, relevance, rationale, usefulness).
   Checks send manuscript/request/critique/line notes through the existing no-training
   TypeSafe-only Gateway route. Results are ephemeral and invalidate on edits.
-  No automatic moderation penalties or public reputation changes are enabled. New earning critiques require 175 words, a fresh server Jev average strictly above 2/4, and grounding/usefulness each at least 2/4. Final private decisions are exported to the reviewer and removed on either participant’s deletion. Composer scores never authorize rewards.
-  Apply migrations through `0020_fixed-critique-reservations` before running this code against
+  No automatic moderation penalties or public reputation changes are enabled. New earning critiques require 175 words, a fresh server Jev average strictly above 2/4, and every category at least 2/4. Final private decisions are exported to the reviewer and removed on either participant’s deletion. Composer scores never authorize rewards.
+  Apply migrations through `0024_workshop-refinements` before running this code against
   a new database. Production Neon is current; the isolated preview on port 5182 uses no live data.
 
 - Phone-first five-destination navigation (Home, Read, Write, Inbox, More), labeled
@@ -85,11 +84,11 @@ showcase choices remain human.
 - Four rotating spotlight places per genre with a FIFO queue. Two critiques release a
   place; published work remains available for further feedback.
 - Five starting credits, one credit for a qualifying 175-word spotlight critique and 0.005
-  per extra word; other critiques earn half. Publishing costs five credits for
+  per extra word; critiques outside the reading room earn zero. Publishing costs five credits for
   two reviewers, plus two credits per additional requested reviewer (up to five).
   Credits are earned, never sold.
 - Private autosaved drafts with saved/offline/conflict status and browser recovery,
-  a 4,000-word posting limit, genre and stage metadata,
+  a 3,500-word posting limit, genre and stage metadata,
   sensitive-content notes, and focused questions for reviewers.
 - A readable manuscript view and structured critique editor: strengths,
   suggestions, overall impression, and a comment anchored to a selected passage.
@@ -141,8 +140,7 @@ Neon PostgreSQL, and the `@neondatabase/serverless` HTTP driver. The UI uses the
 bundled accessible Radix primitives and Lucide icons. PostgreSQL is the only
 application database; there is no SQLite/D1 or browser-storage database fallback.
 Unsynced draft changes are backed up in browser local storage per writer and draft,
-with an explicit recovery prompt. Reply and critique drafts use tab-scoped session
-storage. These copies contain writing; use a trusted browser on shared computers.
+with an explicit recovery prompt. Reply drafts use tab-scoped session storage. Critique drafts sync privately through PostgreSQL and keep browser-local recovery copies. These copies contain writing; use a trusted browser on shared computers.
 The production deployment uses Next.js 16 on Vercel; Vinext remains the local
 development and alternate Worker build path.
 
@@ -224,7 +222,7 @@ immediately after their highlighted passage; manuscript text continues after the
 Click a chip or marked passage to focus it. Double-click an unsent note, or select
 it and press Delete, to remove it. Undo/Redo (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, or Ctrl+Y)
 cover annotation changes. Text fields keep their normal undo behavior. Unsent
-notes and critique text recover from session storage per writer, work, and version.
+notes and critique text recover from local storage per writer, work, and version, alongside private server autosave.
 
 The editor includes focus mode, plain-text/Markdown import, text export, collapsed
 submission settings, process disclosure, and private autosave. A revision created

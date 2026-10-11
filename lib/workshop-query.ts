@@ -7,7 +7,7 @@ import { TERMS_VERSION } from './workshop-policy';
 
 export type Row = Record<string, unknown>;
 export const camel = (row: Row): Row => Object.fromEntries(Object.entries(row).map(([key,value])=>[key.replace(/_([a-z])/g,(_,letter)=>letter.toUpperCase()),value]));
-export const workColumns = `w.id,w.author_id,w.author,w.title,w.genre,w.kind,w.stage,w.request,w.status,w.version,w.created_at,w.words,w.warning,w.mature,w.themes,w.target_reviews,w.critique_visibility,w.larger_work,w.part_number,w.revision_of,w.showcase_opt_in,w.ai_showcase_consent,w.ai_process,(w.author_id LIKE 'sample-%' OR EXISTS(SELECT 1 FROM profiles jp WHERE jp.id=w.author_id AND jp.deleted_at=0 AND jp.terms_version='${TERMS_VERSION}')) AS jev_review_available`;
+export const workColumns = `w.id,w.author_id,w.author,w.title,w.genre,w.kind,w.stage,w.request,w.status,w.version,w.created_at,w.words,w.warning,w.mature,w.themes,w.target_reviews,w.critique_visibility,w.larger_work_id,w.larger_work,w.part_number,w.revision_of,w.showcase_opt_in,w.ai_showcase_consent,w.ai_process,(w.author_id LIKE 'sample-%' OR EXISTS(SELECT 1 FROM profiles jp WHERE jp.id=w.author_id AND jp.deleted_at=0 AND jp.terms_version='${TERMS_VERSION}')) AS jev_review_available`;
 export const publicWork = "w.status NOT IN ('draft','withdrawn')";
 export const workExtras = `(SELECT COUNT(*) FROM reviews r WHERE r.work_id=w.id AND r.version=w.version)::int AS reviews,
  EXISTS(SELECT 1 FROM bookmarks b WHERE b.work_id=w.id AND b.user_id=?) AS bookmarked,
@@ -53,8 +53,12 @@ export async function queryCollection(db: Database, uid: string, params: URLSear
   const genre=params.get('genre');if(genre&&genre!=='All genres'){where.push('w.genre=?');values.push(genre.slice(0,80));}
   const search=(params.get('q')||'').trim().slice(0,80);
   if(search){const terms=searchTerms(search);where.push(`${workSearchVector} @@ to_tsquery('simple',?)`);values.push(terms);}
+  for(const field of ['kind','stage']){const value=(params.get(field)||'').slice(0,80);if(value){where.push('w.'+field+'=?');values.push(value);}}
+  const length=params.get('length');if(length==='short')where.push('w.words<=1000');if(length==='medium')where.push('w.words BETWEEN 1001 AND 2000');if(length==='long')where.push('w.words>2000');
+  const focus=(params.get('focus')||'').slice(0,40);if(focus){where.push('w.request ILIKE ?');values.push('%'+focus.replaceAll('%','').replaceAll('_','')+'%');}
+  if(params.get('available')==='true'){where.push("w.status='spotlight' AND w.author_id<>? AND NOT EXISTS(SELECT 1 FROM reviews r WHERE r.work_id=w.id AND r.user_id=? AND r.version=w.version) AND (SELECT COUNT(*) FROM reviews r WHERE r.work_id=w.id AND r.version=w.version)+(SELECT COUNT(*) FROM critique_reservations cr WHERE cr.work_id=w.id AND cr.version=w.version AND cr.expires_at>? AND cr.user_id<>?)<w.target_reviews");values.push(uid,uid,Date.now(),uid);}
   const sort=params.get('sort')||'Newest first';
-  const recommended=sort==='Recommended';
+  const recommended=sort==='Recommended'||sort==='Reading room first';
   const ascending=sort==='Shortest first'||sort==='Needs feedback';
   const key=sort==='Shortest first'||sort==='Longest first'?'words':sort==='Needs feedback'?'reviews':'created_at';
   const direction=ascending?'ASC':'DESC'; const op=ascending?'>':'<';

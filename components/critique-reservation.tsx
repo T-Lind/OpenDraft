@@ -71,7 +71,7 @@ export function CritiqueReservation({ reservation, workId }: { reservation: Retu
   return <section className={'critique-reservation' + (held ? ' held' : '')} aria-label="Critique spot">
     <div className="reservation-heading">{held ? <ShieldCheck size={19}/> : <Clock size={19}/>}<strong>{held ? 'Your critique spot is held' : expired ? 'Your reservation has expired' : 'Critique spot availability'}</strong></div>
     {state ? <>
-      {held ? <p><b>{Math.max(1, Math.ceil((mine.expiresAt - now) / 60_000))} minutes left.</b> Starting this critique reserved a spot for 30 minutes. It expires even while you are writing.</p>
+      {held ? <p><b>{Math.max(1, Math.ceil((mine.expiresAt - now) / 60_000))} minutes left.</b>{mine.expiresAt-now<=5*60_000&&<span className="reservation-warning" role="status"> Your hold expires soon. Your draft stays safe; reserve again if a spot is still available.</span>} Starting this critique reserved a spot for 30 minutes. It expires even while you are writing.</p>
         : mine && mine.workId !== workId ? <p>You hold a spot on “{mine.title}”. You can hold one spot at a time.</p>
           : state.reservable ? <p>{expired?'Your draft is safe. ':''}{state.available > 0 ? `${state.available} requested ${state.available === 1 ? 'spot is' : 'spots are'} available. You can reserve ${expired?'again ':''}for another 30 minutes.` : 'All requested spots are temporarily held by other readers. You can keep reading and drafting; check back for an opening.'}</p>
             : <p>This work is not available for reservations in the reading room. You can still leave feedback.</p>}

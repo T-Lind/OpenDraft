@@ -1,0 +1,13 @@
+'use client';
+import {readingComplete,type Engagement} from '@/lib/critique-quality';
+import type {AutoCritiqueCheck} from '@/hooks/use-auto-critique-check';
+export function creditReadiness(inRoom:boolean,words:number,summary:Engagement|null|undefined,check:AutoCritiqueCheck,enabled:boolean){
+ if(!inRoom)return 'This work is outside the reading room. Feedback is welcome for zero credits.';
+ if(words<175)return `${175-words} more ${175-words===1?'word':'words'} needed for credit eligibility. Shorter feedback is welcome for zero credits.`;
+ if(!enabled)return 'Quality checks are unavailable until both participants accept the current workshop terms.';
+ if(check.current?.error)return 'The quality check is unavailable. Your draft is safe; retry, or choose to share for zero credits.';
+ if(check.waiting||check.current?.busy||!check.current?.result)return 'The quality check is pending. Wait for the result, or choose to share for zero credits.';
+ if(!check.current.result.credit.eligible)return 'The critique has not met the quality requirement. Review the category scores and revise, or share for zero credits.';
+ if(!readingComplete(summary))return 'Focused manuscript visibility is incomplete. Return to the text with this tab active, or share for zero credits. Visibility does not prove comprehension.';
+ return 'Ready for the final server check. Credits also depend on the work and available spots when you submit.';
+}

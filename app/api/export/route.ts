@@ -11,6 +11,10 @@ export async function GET(){
   await rateLimit(db,'export:'+uid,3,3_600_000);
   const profile=await db.prepare('SELECT * FROM profiles WHERE id=?').bind(uid).first();
   const sections=[
+   ['largerWorks','SELECT * FROM larger_works WHERE author_id=?',[uid]],
+   ['largerWorkSubscriptions','SELECT * FROM larger_work_followers WHERE user_id=?',[uid]],
+   ['unfinishedCritiques','SELECT * FROM critique_drafts WHERE user_id=?',[uid]],
+   ['critiqueReplies','SELECT c.* FROM critique_replies c JOIN reviews r ON r.id=c.review_id JOIN works w ON w.id=r.work_id WHERE c.user_id=? OR r.user_id=? OR w.author_id=?',[uid,uid,uid]],
    ['workReadingPreferences','SELECT work_id AS id,work_id,feed_updates,email_updates,read_version,read_at,reminder_at,reminder_fired_at,updated_at FROM work_preferences WHERE user_id=?',[uid]],
    ['workUpdates','SELECT * FROM work_notifications WHERE user_id=?',[uid]],
    ['queueHistory','SELECT e.* FROM work_flow_events e JOIN works w ON w.id=e.work_id WHERE w.author_id=?',[uid]],

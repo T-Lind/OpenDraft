@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
+import "./refinements.css";
 import { ReadingPreferencesProvider } from '@/components/reading-preferences';
 
 export const metadata: Metadata = {

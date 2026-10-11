@@ -169,6 +169,13 @@
       "when": 1791340000000,
       "tag": "0023_larger-works",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791682870342,
+      "tag": "0024_workshop-refinements",
+      "breakpoints": true
     }
   ]
 }

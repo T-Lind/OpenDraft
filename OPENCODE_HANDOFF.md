@@ -1,3 +1,15 @@
+# Workshop refinements (October 10, 2026)
+
+Terms version 2026-10-10.1 explains private server autosave for unfinished critiques, conversations, and larger-work subscriptions. Updated acceptance is required before syncing feedback or sharing contributions.
+
+Larger works now have stable PostgreSQL identities, a synopsis, a chapter page with current and older versions, previous/next navigation, and opt-in feed subscriptions for new published chapters. Renaming from the larger-work page updates every linked chapter without losing subscriptions. Private chapter titles remain author-only. Migration 0024 backfills existing title-based groupings.
+
+Unfinished critiques autosave privately across devices with optimistic timestamps and browser recovery. Different copies require an explicit choice; reading visibility and quality results do not sync or authorize rewards. My critiques merges server drafts with browser copies and offers text export and confirmed discard. Successful submission clears the server draft atomically. Critique conversations inherit parent visibility, accept replies only from writer/reviewer, respect blocks, notify the other participant, and earn no credits. Export/deletion includes all new records.
+
+Browsing adds saved browser preferences for length, type, stage, request-text focus, and available spots. Reading room first is an explicit status/recency order. The dashboard brings unfinished critiques, unseen updates, and private drafts forward. Credit readiness distinguishes short feedback, pending/failed checks, incomplete visibility, and outside-room status without exposing a reading-region map. Holds warn in their final five minutes. Publish confirmation summarizes cost, requested critiques, visibility, content notes, and length; over-limit drafts explain the exact blocker.
+
+Email delivery remains disabled pending a verified sender; no paid setup was performed. The regular test command now includes work-update and workspace regression checks. Apply migration 0024 before running this code against an existing database.
+
 # Latest workshop changes (October 7, 2026)
 
 Focus-mode work titles align with the manuscript column and have space before the text. Annotation tools stay in a reserved 76px gutter with a 12px gap, including on phones, instead of covering passages. Focused manuscripts stay transparent in dark mode.

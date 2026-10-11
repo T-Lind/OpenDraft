@@ -1,4 +1,8 @@
 'use client';
+import {CritiqueThread} from '@/components/critique-thread';
+import {CritiqueSync} from '@/components/critique-sync';
+import {useSyncedCritique} from '@/hooks/use-synced-critique';
+import {creditReadiness} from '@/components/credit-readiness';
 import {WorkParts} from '@/components/work-parts';
 import {WorkReadingOptions} from '@/components/work-reading-options';
 import {WorkUpdateFeed} from '@/components/work-update-feed';
@@ -147,6 +151,7 @@ export function Editor({ initial, credits, act, busy, onDone, close, onSaved,rev
   const { work, update } = draft;
   const locked = busy || leaving;
   const count = wordCount(work.content);
+  const publishIssues=[!work.title.trim()?'Add a title.':'',!work.content.trim()?'Add your writing.':'',work.request.trim().length<5?'Add a short feedback request.':'',count>3500?`Remove ${count-3500} words or split this draft into linked chapters; each post is limited to 3,500 words.`:''].filter(Boolean);
   const valid = !!work.title.trim() && !!work.content.trim() && work.request.trim().length >= 5 && count <= 3500;
   const themes = (work.themes || '').split(',').map(s => s.trim()).filter(Boolean);
   const toggleTheme = (t: string) => { const set = new Set(themes); if (set.has(t)) set.delete(t); else set.add(t); update('themes', Array.from(set).join(', ')); };
@@ -225,12 +230,12 @@ export function Editor({ initial, credits, act, busy, onDone, close, onSaved,rev
         </span>
       </div>
       {!canAfford && <p className="fine-print">Sharing is grayed out because you have {formatCredits(credits)} of the {cost} credits needed. Your draft can stay private for free — critique other writing to earn publishing credits.</p>}
-      {!valid && <p className="fine-print">Add a title, some writing, and a short note about the feedback you want before you can share.</p>}
+      {!valid && <p className="fine-print">{publishIssues.join(' ')}</p>}
       </fieldset>
       <Dialog open={confirmPublish} onOpenChange={open => {if(!locked)setConfirmPublish(open);}}>
         <DialogContent className="compact-dialog">
           <DialogTitle>Ready for fresh eyes?</DialogTitle>
-          <DialogDescription>“{work.title}” will be visible to members of this workshop. {cost} credits will be deducted from your balance. You can withdraw it later.</DialogDescription>
+          <DialogDescription>“{work.title}” will be published for workshop readers. {cost} credits will be deducted; you can withdraw it later.</DialogDescription><dl className="publish-summary"><dt>Requested critiques</dt><dd>{work.targetReviews||2}</dd><dt>Critique visibility</dt><dd>{work.critiqueVisibility==='private'?'Writer and reviewer only':'Public'}</dd><dt>Content notes</dt><dd>{[work.warning,work.themes].filter(Boolean).join(' · ')||'None'}</dd><dt>Words</dt><dd>{count.toLocaleString()} / 3,500</dd></dl>
           <div className="form-actions">
             <Button variant="outline" type="button" disabled={locked} onClick={() => setConfirmPublish(false)}>Keep editing</Button>
             <Button type="button" disabled={locked} onClick={() => void save(true)}>Publish writing</Button>
@@ -588,6 +593,8 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRe
     try { localStorage.setItem(key, JSON.stringify({ ...form, annotations: next.present,workId:w.id,title:w.title,version:w.version,updatedAt:Date.now() }));setCritiqueStorageAvailable(true); } catch { setCritiqueStorageAvailable(false); }
   };
   const totalWords = wordCount(form.overall + ' ' + form.strengths + ' ' + form.suggestions + ' ' + localAnnotations.map(a => a.body).join(' '));
+  const sync=useSyncedCritique(w.id,w.version,canAnnotate&&data.user?.termsVersion===TERMS_VERSION,critiqueDraft,restored=>{const next={overall:restored.overall,strengths:restored.strengths,suggestions:restored.suggestions};const notes=restored.annotations.map(a=>({...a,id:'local-'+crypto.randomUUID(),workId:w.id,userId:uid||'',author:data.user?.name||'You',createdAt:Date.now()})) as WorkAnnotation[];setForm(next);setHistory(annotationHistory(notes));try{localStorage.setItem(key,JSON.stringify({...next,annotations:notes,workId:w.id,title:w.title,version:w.version,updatedAt:Date.now()}));}catch{setCritiqueStorageAvailable(false);}});
+  const readiness=creditReadiness(w.status==='spotlight',totalWords,engagement.summary,critiqueCheck,qualityEnabled);
   const valid = totalWords > 0;
   const inRoom = w.status === 'spotlight';
   const baseCredit = inRoom ? 1 : 0;
@@ -595,7 +602,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRe
   const reward = totalWords < MIN_REVIEW_WORDS ? 0 : Math.round((baseCredit + (totalWords - MIN_REVIEW_WORDS) * perWord) * 1000) / 1000;
   const [confirmNoCredits,setConfirmNoCredits]=useState(false);
   const allGreen=readingComplete(engagement.summary)&&critiqueCheck.current?.result?.credit.eligible===true;
-  const submit = async (withoutCredits=false) => { if(!withoutCredits&&(!inRoom||totalWords<MIN_REVIEW_WORDS||!allGreen)){setConfirmNoCredits(true);return;} const payload = { ...form, withoutCredits, attested:true, workId: w.id,version:w.version, ...(engagement.summary?{engagement:engagement.summary}:{}), annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, 'Critique shared.')) { try{localStorage.removeItem(key);sessionStorage.removeItem(key);}catch{/* The server submission succeeded even if tab storage is unavailable. */} setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory()); engagement.clear(); setFeedbackTab('All feedback'); } };
+  const submit = async (withoutCredits=false) => { if(!withoutCredits&&(!inRoom||totalWords<MIN_REVIEW_WORDS||!allGreen)){setConfirmNoCredits(true);return;} const payload = { ...form, withoutCredits, attested:true, workId: w.id,version:w.version, ...(engagement.summary?{engagement:engagement.summary}:{}), annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, 'Critique shared.')) { try{localStorage.removeItem(key);sessionStorage.removeItem(key);}catch{/* The server submission succeeded even if tab storage is unavailable. */} sync.pause();setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory()); engagement.clear(); setFeedbackTab('All feedback'); } };
   const saved = data.bookmarks.includes(w.id);
 
   const serverAnnotations: WorkAnnotation[] = (data.annotations || []).filter(a => a.workId === w.id).map(a => ({ ...a, start: a.startPos ?? a.start, end: a.endPos ?? a.end }));
@@ -631,7 +638,7 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRe
             <div className="reader-byline">
               <WriterAvatar name={w.author} userId={w.authorId.startsWith('sample-') ? undefined : w.authorId} className="avatar peach" />
               <span>By <button className="author-link" onClick={() => onAuthor(w.authorId)}>{w.author}</button></span>
-              <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={13} />{Math.max(1, Math.ceil(w.words / 200))} min read</span>
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={13} />{Math.max(1, Math.ceil(w.words / 225))} min read</span>
               <button className={'icon-button' + (saved ? ' is-saved' : '')} aria-label={saved ? 'Remove bookmark' : 'Bookmark work'} aria-pressed={saved} disabled={busy} onClick={() => void act({ action: 'bookmark', workId: w.id, saved: !saved }, saved ? 'Bookmark removed.' : 'Work saved.')}><Bookmark size={17} fill={saved ? 'currentColor' : 'none'} /></button>
             </div>
             <div className="reader-request">
@@ -670,12 +677,12 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRe
                       <div className="critique-wordcount"><span>{totalWords} words</span><span>{totalWords >= MIN_REVIEW_WORDS ? critiqueCheck.current?.result?.credit.eligible===false?'Below quality requirement · 0 credits':`${formatCredits(reward)} potential credits` : 'Short critique · 0 credits'}</span></div>
                       <div className="word-progress"><span style={{ width: Math.min(100, (totalWords / MIN_REVIEW_WORDS) * 100) + '%' }} /></div>
                       <p className="fine-print">{CRITIQUE_CREDIT_RULE} Shorter critiques are welcome without credits.</p>
-                      <CritiqueQuality key={key} content={w.content} draft={critiqueDraft} enabled={qualityEnabled} check={critiqueCheck}/><p className="fine-print human-critique-reminder">Write your critique yourself. Generative AI may not write or rewrite it. The evaluator scores only.</p>
+                      <p className="credit-readiness" role="status">{readiness}</p><CritiqueSync sync={sync}/><CritiqueQuality key={key} content={w.content} draft={critiqueDraft} enabled={qualityEnabled} check={critiqueCheck}/><p className="fine-print human-critique-reminder">Write your critique yourself. Generative AI may not write or rewrite it. The evaluator scores only.</p>
                       <span className="disabled-wrap" title={!data.user ? 'Sign in to share a critique.' : !totalWords ? 'Add some feedback first. Short critiques are welcome.' : busy ? 'Sharing and checking credit eligibility…' : reward ? 'Credits depend on the final server quality check.' : 'Share this shorter critique without earning credits.'}>
                         <Button type="submit" className="primary-button submit-critique" disabled={busy || (!!data.user && !valid)}>{busy ? <LoaderCircle size={15} className="animate-spin" /> : <MessageSquare size={15} />} {data.user ? `${reward&&critiqueCheck.current?.result?.credit.eligible===false?'Share without credits':'Share your critique'}${localAnnotations.length ? ` (+${localAnnotations.length} line notes)` : ''}` : 'Sign in to critique'}</Button>
                       </span>
                       <p className="fine-print" role="status">{critiqueStorageAvailable?'Critique draft autosaved on this browser. Return from My critiques to continue, even after closing this tab.':''}</p>
-                      <Dialog open={confirmNoCredits} onOpenChange={setConfirmNoCredits}><DialogContent><DialogHeader><DialogTitle>Share without credits?</DialogTitle><DialogDescription>{!inRoom?'This work is outside the reading room; credit earning is locked.':'Read more carefully and revise your feedback. Credits require careful reading, at least 175 words, and a passing OpenDraft quality check.'} You can revise, or share this critique for zero credits.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={()=>setConfirmNoCredits(false)}>Keep reviewing</Button><Button type="button" disabled={busy} onClick={()=>{setConfirmNoCredits(false);void submit(true);}}>Confirm: share for zero credits</Button></DialogFooter></DialogContent></Dialog>
+                      <Dialog open={confirmNoCredits} onOpenChange={setConfirmNoCredits}><DialogContent><DialogHeader><DialogTitle>Share without credits?</DialogTitle><DialogDescription>{readiness} You can revise, or share this critique for zero credits.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={()=>setConfirmNoCredits(false)}>Keep reviewing</Button><Button type="button" disabled={busy} onClick={()=>{setConfirmNoCredits(false);void submit(true);}}>Confirm: share for zero credits</Button></DialogFooter></DialogContent></Dialog>
                       <p className="privacy-note">{w.critiqueVisibility==='private'?'Your critique is private between you and the writer.':'Your critique will be visible to workshop members.'}</p>
                     </form>}
               </TabsContent>
@@ -876,7 +883,7 @@ function FeedbackCard({ review: r, own, onAuthor, annotations }: { review: Revie
         </div>
       )}
       {r.quote && <><blockquote>{r.quote}</blockquote><p>{r.annotation}</p></>}
-      <div className="feedback-rating-actions">{own&&<CritiqueRating id={r.id}/>}</div>
+      <CritiqueThread reviewId={r.id}/><div className="feedback-rating-actions">{own&&<CritiqueRating id={r.id}/>}</div>
     </article>
   );
 }
@@ -893,7 +900,7 @@ export function FeedbackList({ reviews, data, act, busy, onRead, received, onExp
   return (
     <div className="sheet">
       <div className="sheet-head"><h1>{received ? 'Critique feedback' : 'Critiques you have given'}</h1></div>
-      <div className="sheet-toolbar"><span className="fine-print">{reviews.length} {reviews.length === 1 ? 'critique' : 'critiques'} · private between each reader and writer</span></div>
+      <div className="sheet-toolbar"><span className="fine-print">{reviews.length} {reviews.length === 1 ? 'critique' : 'critiques'} · visibility follows each work’s settings</span></div>
       <div style={{ padding: '4px 24px 20px' }}>
         {reviews.map(r => (
           <div key={r.id} style={{ paddingTop: 8 }}>

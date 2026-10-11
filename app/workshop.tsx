@@ -28,6 +28,9 @@ import {AuthDialog} from '@/components/auth-dialog';
 import { ReadingSettings, ReadingAccountBridge, useReadingPreferences, prefersReducedMotion } from '@/components/reading-preferences';
 import { AccountReview } from '@/components/account-review';
 import {AttachWork} from '@/components/work-parts';
+import {LargerWorkPage} from '@/components/larger-work';
+import {NextSteps} from '@/components/next-steps';
+import {BrowseFilters} from '@/components/browse-filters';
 import {CritiqueDrafts} from '@/components/critique-drafts';
 import { CritiquePilotReview } from '@/components/critique-quality';
 
@@ -85,7 +88,8 @@ export default function Workshop() {
   const [view, setView] = useState('Dashboard');
   const [selected, setSelected] = useState('');
   const [search, setSearch] = useState('');
-  const [sort, setSort] = useState('Recommended');
+  const [sort, setSort] = useState('Reading room first');
+  const [browse,setBrowse]=useState({kind:'',stage:'',length:'',focus:'',available:false});
   const [genreFilter, setGenreFilter] = useState('All genres');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
@@ -143,6 +147,7 @@ export default function Workshop() {
       const h = decodeURIComponent(location.hash.slice(1));
       if (h === 'main-content') return;
       if (h.startsWith('read/')) { setSelected(h.slice(5)); setView('Read & critique'); }
+      else if (h.startsWith('larger/')) { setSelected(h.slice(7)); setView('Larger work'); }
       else if (h.startsWith('story/')) { setSelected(h.slice(6)); setView('Story'); }
       else if (h.startsWith('author/')) { setSelected(h.slice(7)); setView('Author profile'); }
       else if(h.startsWith('message/')){setSelected(h.slice(8));setView('Messages');}
@@ -159,7 +164,7 @@ export default function Workshop() {
   const go = useCallback((v: string, id = '') => {
     setView(v);
     setSelected(id);
-    location.hash = id ? (v === 'Author profile' ? 'author/' + id : v === 'Writing circles' ? 'circle/' + id : v === 'Story' ? 'story/' + id : v==='Messages'?'message/'+id:'read/' + id) : v;
+    location.hash = id ? (v === 'Larger work' ? 'larger/' + id : v === 'Author profile' ? 'author/' + id : v === 'Writing circles' ? 'circle/' + id : v === 'Story' ? 'story/' + id : v==='Messages'?'message/'+id:'read/' + id) : v;
     setMoreOpen(false);
     window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
     requestAnimationFrame(() => document.getElementById('main-content')?.focus({ preventScroll: true }));
@@ -228,15 +233,15 @@ export default function Workshop() {
     setView('Editor');
     location.hash = 'Editor';
   };
-  const editDraft = async (work: Work,asRevision=false) => {
-    try{let full=work;if(!full.content){const response=await fetch('/api/workshop?collection=work&id='+encodeURIComponent(work.id));const result=await response.json() as {work:Work;error?:string};if(!response.ok)throw new Error(result.error);full=result.work;}
+  const editDraft = async (work: Pick<Work,'id'> & Partial<Work>,asRevision=false) => {
+    try{let full=work as Work;if(!full.content){const response=await fetch('/api/workshop?collection=work&id='+encodeURIComponent(work.id));const result=await response.json() as {work:Work;error?:string};if(!response.ok)throw new Error(result.error);full=result.work;}
       if(asRevision){const copy={...full,id:crypto.randomUUID(),status:'draft',title:full.title+' (revision)',reviews:0,revisionOf:full.id,version:full.version+1,showcaseOptIn:false,aiShowcaseConsent:false,jevReviewAvailable:false};const response=await fetch('/api/workshop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'autosaveDraft',work:copy,expectedSavedAt:0}),signal:AbortSignal.timeout(20000)});const saved=await response.json() as {savedAt:number;error?:string};if(!response.ok)throw new Error(saved.error);full={...copy,createdAt:saved.savedAt};setRevision(n=>n+1);}
       setEditor(full);go('Editor');
     }catch(error){setToast((error as Error).message||'This draft could not load.');}
   };
 
   const listMode=view==='My writing'?'mine':view==='Saved works'?'saved':'explore';
-  const workPage=usePagedList<Work>('/api/workshop?collection=works&'+new URLSearchParams({mode:listMode,q:search,genre:view==='Explore'?genreFilter:'All genres',sort:view==='My writing'?'Newest first':sort}),!!data.user&&['Explore','Saved works','My writing'].includes(view),revision);
+  const workPage=usePagedList<Work>('/api/workshop?collection=works&'+new URLSearchParams({...(view==='Explore'?{kind:browse.kind,stage:browse.stage,length:browse.length,focus:browse.focus,available:String(browse.available)}:{}),mode:listMode,q:search,genre:view==='Explore'?genreFilter:'All genres',sort:view==='My writing'?'Newest first':sort}),!!data.user&&['Explore','Saved works','My writing'].includes(view),revision);
   const givenPage=usePagedList<Snapshot['reviews'][number]>('/api/workshop?collection=reviews&mode=given',!!data.user&&view==='My critiques',revision);
   const eventPage=usePagedList<Snapshot['events'][number]>('/api/workshop?collection=events',!!data.user&&view==='Credit history',revision);
   const analyticsPage=usePagedList<Analytics['works'][number]&{id:string}>('/api/workshop?collection=analytics',!!data.user&&view==='Analytics',revision);
@@ -368,6 +373,7 @@ export default function Workshop() {
                     <div className="stat-card"><strong>{data.stats?.received??received.length}</strong><span>critiques received</span></div>
                     <div className="stat-card streak-card"><strong><Flame size={15} />{streak}</strong><span>day streak</span></div>
                   </div>
+                  <NextSteps works={own} uid={uid||''} revision={revision} onRead={openStory} onCritique={id=>go('Read & critique',id)} onEdit={editDraft}/>
                   <ShowcaseCard onRead={openStory} onAuthor={openAuthor}/>
                   <div className="dash-grid">
                     <div>
@@ -433,9 +439,10 @@ export default function Workshop() {
                 <div className="filters">
                   <div className="search-box" style={{ flex: 1 }}><Search size={15} /><Input aria-label="Search writing" placeholder="Find a story or a writer…" value={search} onChange={e => setSearch(e.target.value)} /></div>
                   {view === 'Explore' && <div className="filter-select"><BookOpen size={14} /><select aria-label="Filter by genre" value={genreFilter} onChange={e => setGenreFilter(e.target.value)}>{genres.map(g => <option key={g}>{g}</option>)}</select></div>}
-                  <div className="filter-select"><SlidersHorizontal size={14} /><select aria-label="Sort works" value={sort} onChange={e => setSort(e.target.value)}>{['Recommended', 'Needs feedback', 'Newest first', 'Shortest first', 'Longest first'].map(s => <option key={s}>{s}</option>)}</select></div>
+                  <div className="filter-select"><SlidersHorizontal size={14} /><select aria-label="Sort works" value={sort} onChange={e => setSort(e.target.value)}>{['Reading room first', 'Needs feedback', 'Newest first', 'Shortest first', 'Longest first'].map(s => <option key={s}>{s}</option>)}</select></div>
                 </div>
               </div>
+              {view==='Explore'&&<BrowseFilters value={browse} onChange={setBrowse}/>}
               <div className="result-toolbar">
                 <span>{works.length} {works.length === 1 ? 'work' : 'works'}{genreFilter !== 'All genres' && view === 'Explore' ? ` in ${genreFilter}` : ''}{search ? ` for “${search}”` : ''}</span>
                 <span className="result-tools">
@@ -503,6 +510,7 @@ export default function Workshop() {
           )}
 
           {view==='Friends'&&<FriendsView incomingRequests={friendRequests} onAuthor={openAuthor} onMessage={id=>go('Messages',id)}/>}
+          {view === 'Larger work' && <LargerWorkPage key={selected} id={selected} onRead={openStory} onAuthor={openAuthor} onDraft={id=>void editDraft({id})}/>}
           {view === 'Messages' && <MessagesView initialWith={selected} data={{...data,revision,unreadMessages,unreadUpdates:workUnread}} act={act} busy={busy} onAuthor={openAuthor} onOpenStory={openStory} onUnreadChange={setNotificationCount} />}
           {view === 'My critiques' && <>{uid&&<CritiqueDrafts uid={uid} onRead={id=>go('Read & critique',id)}/>}<FeedbackList reviews={given} data={data} act={act} busy={busy} onRead={openStory} received={false} onExplore={() => go('Explore')} onAuthor={openAuthor} /><PageMore page={givenPage} label="More critiques" /></>}
           {view === 'Analytics' && <><AnalyticsView analytics={data.analytics?{...data.analytics,works:analyticsPage.items}:null} own={own} onRead={openStory} onWrite={newDraft} /><PageMore page={analyticsPage} label="More reader stats" /></>}

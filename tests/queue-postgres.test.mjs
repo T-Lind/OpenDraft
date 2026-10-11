@@ -6,9 +6,11 @@ import {build} from 'esbuild';
 if(existsSync('.env'))process.loadEnvFile('.env');
 const pool=new pg.Pool({connectionString:process.env.TEST_DATABASE_URL||process.env.DATABASE_URL,max:1});
 const schema='opendraft_queue_test_'+randomUUID().replaceAll('-','');
+assert.match(schema,/^opendraft_queue_test_[a-f0-9]{32}$/);
 const client=await pool.connect();
 try {
  await client.query('BEGIN');await client.query(`CREATE SCHEMA "${schema}"`);await client.query(`SET LOCAL search_path TO "${schema}"`);
+ assert.equal((await client.query('SELECT current_schema() AS schema')).rows[0].schema,schema);
  const journal=JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8'));
  await client.query(journal.entries.map(e=>readFileSync(`drizzle/${e.tag}.sql`,'utf8').replaceAll('REFERENCES "public".',`REFERENCES "${schema}".`)).join('\n'));
  mkdirSync('.sites-runtime/tests',{recursive:true});

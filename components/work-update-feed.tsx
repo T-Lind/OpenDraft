@@ -2,7 +2,7 @@
 import {useState} from 'react';
 import {usePagedList,PageMore} from './paged-list';
 import {Button} from './ui/button';
-const labels:Record<string,string>={reminder:'Your reading reminder',critique:'New feedback',revision:'New revision posted',readingRoom:'Now in the reading room',completed:'Requested critiques complete'};
+const labels:Record<string,string>={reminder:'Your reading reminder',critique:'New feedback',revision:'New revision posted',readingRoom:'Now in the reading room',completed:'Requested critiques complete',chapter:'New chapter posted',reply:'Critique conversation'};
 type Update={id:string;targetWorkId:string;title:string;targetTitle:string;kind:string;readAt:number|null;createdAt:number};
 export function WorkUpdateFeed({revision,onRead}:{revision:number;onRead:(id:string)=>void}){
  const page=usePagedList<Update>('/api/work-updates?limit=30',true,revision),[error,setError]=useState(''),[busy,setBusy]=useState(false);

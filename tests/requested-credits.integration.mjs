@@ -6,7 +6,7 @@ export async function requestedCredits({query,read,action,ok,work}){
  await query("UPDATE works SET status='spotlight' WHERE id='requested-credit-work'");
  const test=globalThis.__opendraftTest,base={workId:'requested-credit-work',version:1,overall:Array(175).fill('human').join(' '),withoutCredits:false};
  let result=await action('missing-reader',{action:'review',review:{...base,engagement:undefined}});
- ok(result.status===409&&result.data.error.includes('Read more carefully'),'missing reading checks require revision');
+ ok(result.status===409&&result.data.error.includes('visibility'),'missing reading checks require revision');
  result=await action('partial-reader',{action:'review',review:{...base,engagement:{consent:true,version:1,activeMs:36000,readingMs:36000,regionsMs:[2999,...Array(11).fill(3000)]}}});
  ok(result.status===409,'one incomplete reading region blocks credits');
  const scores={...test.creditScores};

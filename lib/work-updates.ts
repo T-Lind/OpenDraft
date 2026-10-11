@@ -4,7 +4,7 @@ import {readEnv} from '@/lib/auth';
 import {after} from 'next/server';
 import {z} from 'zod';
 
-export const workUpdateLabels:Record<string,string>={reminder:'Your reading reminder',critique:'New feedback',revision:'New revision posted',readingRoom:'Now in the reading room',completed:'Requested critiques complete'};
+export const workUpdateLabels:Record<string,string>={reminder:'Your reading reminder',critique:'New feedback',revision:'New revision posted',readingRoom:'Now in the reading room',completed:'Requested critiques complete',chapter:'New chapter posted',reply:'Critique conversation'};
 export const mailConfigured=()=>!!readEnv('RESEND_API_KEY')&&!!readEnv('AUTH_EMAIL_FROM')&&!!readEnv('AUTH_SECRET')&&!!readEnv('AUTH_APP_URL');
 const verifiedSQL="(EXISTS(SELECT 1 FROM auth_identities ai WHERE ai.profile_id=p.id AND ai.provider='google') OR EXISTS(SELECT 1 FROM auth_credentials ac WHERE ac.profile_id=p.id AND ac.email_verified_at>0 AND ac.email=p.email))";
 const unblockedSQL="NOT EXISTS(SELECT 1 FROM member_blocks b WHERE (b.user_id=p.id AND b.blocked_id=w.author_id) OR (b.user_id=w.author_id AND b.blocked_id=p.id))";
@@ -45,7 +45,7 @@ export async function enqueueReadingReminders(db:Database,uid?:string,now=Date.n
  ) UPDATE work_preferences s SET reminder_fired_at=s.reminder_at FROM due WHERE s.user_id=due.user_id AND s.work_id=due.work_id AND s.reminder_at=due.reminder_at RETURNING s.work_id`).bind(now,...(uid?[uid]:[]),now);
  return (await db.batch([statement]))[0];
 }
-export const visibleWorkNotificationsSQL="FROM work_notifications n JOIN works w ON w.id=n.work_id JOIN works target ON target.id=n.target_work_id WHERE n.user_id=? AND n.feed=true AND w.status NOT IN ('draft','withdrawn') AND target.status NOT IN ('draft','withdrawn') AND NOT EXISTS(SELECT 1 FROM member_blocks b WHERE (b.user_id=n.user_id AND b.blocked_id=w.author_id) OR (b.user_id=w.author_id AND b.blocked_id=n.user_id))";
+export const visibleWorkNotificationsSQL="FROM work_notifications n JOIN works w ON w.id=n.work_id JOIN works target ON target.id=n.target_work_id WHERE n.user_id=? AND n.feed=true AND (n.review_id IS NULL OR EXISTS(SELECT 1 FROM reviews r WHERE r.id=n.review_id AND (w.critique_visibility='public' OR w.author_id=n.user_id OR r.user_id=n.user_id))) AND w.status NOT IN ('draft','withdrawn') AND target.status NOT IN ('draft','withdrawn') AND NOT EXISTS(SELECT 1 FROM member_blocks b WHERE (b.user_id=n.user_id AND b.blocked_id=w.author_id) OR (b.user_id=w.author_id AND b.blocked_id=n.user_id))";
 const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
 async function signingKey(){const secret=readEnv('AUTH_SECRET');if(!secret)throw new Error('Notification signing is not configured.');return crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign','verify']);}
 export async function unsubscribeToken(uid:string,workId:string,now=Date.now()){
