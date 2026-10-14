@@ -6,11 +6,17 @@ type Draft={key:string;workId:string;title:string;version:number;updatedAt:numbe
 export function CritiqueDrafts({uid,onRead}:{uid:string;onRead:(id:string)=>void}){
   const [drafts,setDrafts]=useState<Draft[]>([]),[error,setError]=useState(''),[revision,setRevision]=useState(0),[armed,setArmed]=useState('');
   useEffect(()=>{
-    const found:Draft[]=[];
-    try{for(let i=0;i<localStorage.length&&found.length<100;i++){
-      const key=localStorage.key(i);if(!key?.startsWith('opendraft:temporary-critique:')||!key.includes(':'+uid+':')||key.endsWith(':reading'))continue;
-      const value=JSON.parse(localStorage.getItem(key)||'null');if(value&&typeof value.workId==='string'&&typeof value.title==='string'&&key==='opendraft:temporary-critique:'+value.workId+':'+uid+':'+value.version&&(value.overall||value.strengths||value.suggestions||value.annotations?.length))found.push({key,workId:value.workId,title:value.title,version:value.version,updatedAt:value.updatedAt});
-    }}catch{/* Storage unavailable; keep server history usable. */}
+    const found: Draft[] = [], stale: string[] = [];
+    try{const maxAge=90*86400000,keys=Object.keys(localStorage).filter(key=>key.startsWith('opendraft:temporary-critique:')&&key.includes(':'+uid+':')&&!key.endsWith(':reading'));
+      for(const key of keys){if(found.length+stale.length>=400)break;
+        const value=JSON.parse(localStorage.getItem(key)||'null');
+        const valid=value&&typeof value.workId==='string'&&typeof value.title==='string'&&key==='opendraft:temporary-critique:'+value.workId+':'+uid+':'+value.version;
+        // Drop corrupt or long-abandoned copies so browser storage cannot grow without bound.
+        if(!valid||!(value.overall||value.strengths||value.suggestions||value.annotations?.length)||!(typeof value.updatedAt!=='number'||Date.now()-value.updatedAt<maxAge)){stale.push(key);continue;}
+        found.push({key,workId:value.workId,title:value.title,version:value.version,updatedAt:value.updatedAt});
+      }
+      for(const key of stale){localStorage.removeItem(key);localStorage.removeItem(key+':reading');}
+    }catch{/* Storage unavailable; keep server history usable. */}
     const controller=new AbortController();
     fetch('/api/workspace?section=drafts',{signal:controller.signal}).then(async r=>{if(!r.ok)throw new Error('Could not load drafts saved across devices. Browser copies are shown.');const d=await r.json() as {items:Array<{workId:string;version:number;title:string;updatedAt:number}>};for(const row of d.items){const local=found.find(f=>f.workId===row.workId&&f.version===row.version);if(local)local.serverStamp=row.updatedAt;else found.push({key:'opendraft:temporary-critique:'+row.workId+':'+uid+':'+row.version,workId:row.workId,title:row.title,version:row.version,updatedAt:row.updatedAt,serverStamp:row.updatedAt});}setError('');}).catch(e=>{if(!controller.signal.aborted)setError(e.message);}).finally(()=>{if(!controller.signal.aborted)setDrafts(found.sort((a,b)=>b.updatedAt-a.updatedAt));});
     const changed=()=>setRevision(n=>n+1);window.addEventListener('opendraft:critique-drafts',changed);return()=>{controller.abort();window.removeEventListener('opendraft:critique-drafts',changed);};

@@ -13,6 +13,8 @@ const DUMMY_HASH='pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAA
 function appOrigin(request:Request):string{
  const configured=readEnv('AUTH_APP_URL');
  if(configured){const url=new URL(configured);if(!['http:','https:'].includes(url.protocol))throw new Error('AUTH_APP_URL must be an HTTP(S) URL.');return url.origin;}
+ // Never build one-time links from an untrusted Host header in production.
+ if(readEnv('NODE_ENV')==='production')throw Object.assign(new Error('Sign-in links need the configured application URL.'),{status:503});
  return new URL(request.url).origin;
 }
 
@@ -22,7 +24,7 @@ async function issueToken(request:Request,profileId:string,email:string,kind:'ve
  await db.batch([
   db.prepare('DELETE FROM auth_tokens WHERE profile_id=? AND kind=?').bind(profileId,kind),
   db.prepare('INSERT INTO auth_tokens(token_hash,profile_id,kind,expires_at,created_at) VALUES(?,?,?,?,?)').bind(hash,profileId,kind,expires,now),
- ]);
+ ], false);
  const path=kind==='verify'?`/api/auth/verify?token=${encodeURIComponent(raw)}`:`/auth/reset?token=${encodeURIComponent(raw)}`;
  return sendAuthEmail(email,kind,appOrigin(request)+path);
 }
@@ -75,17 +77,21 @@ export async function POST(request:Request){
   }
 
   const password=passwordSchema.parse(body.password);
-  if(existing?.email_verified_at&&!existing.deleted_at)return json({error:'An account already uses this email. Sign in or reset its password.'},409);
+  if(existing&&!existing.deleted_at){
+   if(existing.email_verified_at)return json({error:'An account already uses this email. Sign in or reset its password.'},409);
+   // An unauthenticated request must never change an existing account's password.
+   // A pending registration is completed only through the emailed verification link,
+   // so re-registering just sends a fresh link and keeps the original password.
+   const sent=await issueToken(request,existing.profile_id,email,'verify');
+   return json({ok:true,message:'Check your email to verify your account.',...sent});
+  }
   const passwordHash=await hashPassword(password);
-  let profileId=existing?.profile_id;
-  if(!profileId){
-   const linked=await db.prepare('SELECT id FROM profiles WHERE LOWER(email)=? AND deleted_at=0 ORDER BY created_at LIMIT 1').bind(email).first<{id:string}>();
-   profileId=linked?.id||crypto.randomUUID();
-   await db.batch([
-    db.prepare("INSERT INTO profiles(id,name,email,created_at) VALUES(?,'Writer',?,?) ON CONFLICT(id) DO UPDATE SET email=CASE WHEN profiles.email='' THEN excluded.email ELSE profiles.email END").bind(profileId,email,now),
-    db.prepare('INSERT INTO auth_credentials(profile_id,email,password_hash,email_verified_at,created_at,updated_at) VALUES(?,?,?,0,?,?)').bind(profileId,email,passwordHash,now,now),
-   ]);
-  }else await db.prepare('UPDATE auth_credentials SET password_hash=?,updated_at=? WHERE profile_id=? AND email_verified_at=0').bind(passwordHash,now,profileId).run();
+  const linked=await db.prepare('SELECT id FROM profiles WHERE LOWER(email)=? AND deleted_at=0 ORDER BY created_at LIMIT 1').bind(email).first<{id:string}>();
+  const profileId=linked?.id||crypto.randomUUID();
+  await db.batch([
+   db.prepare("INSERT INTO profiles(id,name,email,created_at) VALUES(?,'Writer',?,?) ON CONFLICT(id) DO UPDATE SET email=CASE WHEN profiles.email='' THEN excluded.email ELSE profiles.email END").bind(profileId,email,now),
+   db.prepare('INSERT INTO auth_credentials(profile_id,email,password_hash,email_verified_at,created_at,updated_at) VALUES(?,?,?,0,?,?)').bind(profileId,email,passwordHash,now,now),
+  ], false);
   const sent=await issueToken(request,profileId,email,'verify');
   return json({ok:true,message:'Check your email to verify your account.',...sent},201);
  }catch(error){

@@ -1,6 +1,7 @@
 import {enqueueReadingReminders,visibleWorkNotificationsSQL,scheduleWorkEmails} from '@/lib/work-updates';
 import { database } from '@/db/storage';
 import {member} from '@/lib/member';
+import {rateLimit} from '@/lib/rate-limit';
 import { unreadSQL } from '@/lib/workshop-query';
 export const dynamic='force-dynamic';
 export const maxDuration=60;
@@ -8,6 +9,7 @@ export async function GET(){
  try {
   const db=database(),session=await member(db);const uid=session?.uid;
   if(!uid)return Response.json({error:'Sign in to check messages.'},{status:401});
+  await rateLimit(db,'notifications:'+uid,30,60000,Date.now());
   await enqueueReadingReminders(db,uid);scheduleWorkEmails(db);
   const updates=await db.prepare(`SELECT COUNT(*) FILTER(WHERE n.read_at IS NULL)::int AS unread, (SELECT n.id ${visibleWorkNotificationsSQL} ORDER BY n.created_at DESC,n.id DESC LIMIT 1) AS latest ${visibleWorkNotificationsSQL}`).bind(uid,uid).first();
   const results=await db.read([

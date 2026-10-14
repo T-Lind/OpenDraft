@@ -176,6 +176,13 @@
       "when": 1791682870342,
       "tag": "0024_workshop-refinements",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792014047398,
+      "tag": "0025_previous_magik",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache
 const error=(e:unknown)=>{if(e instanceof z.ZodError||e instanceof SyntaxError)return json({error:'Provide valid reading options.'},400);const err=e as Error&{status?:number};return json({error:err.status?err.message:'Work updates are temporarily unavailable.'},err.status||503);};
 export async function GET(request:Request){try{
  const db=database(),user=await member(db);if(!user)fail('Sign in to manage reading and updates.',401);
+ await rateLimit(db,'work-updates-read:'+user.uid,60,60000,Date.now());
  const params=new URL(request.url).searchParams,workId=params.get('workId');
  if(workId)return json(await workPreferenceStatus(db,user.uid,workId.slice(0,100)));
  await enqueueReadingReminders(db,user.uid);scheduleWorkEmails(db);

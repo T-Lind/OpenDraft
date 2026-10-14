@@ -10,8 +10,9 @@ const prefix = (uid: string) => 'opendraft:draft:' + encodeURIComponent(uid) + '
 function recoveryFor(initial: Work): Recovery | null {
   try {
     const base = prefix(initial.authorId);
-    const id = initial.title || initial.content ? initial.id : localStorage.getItem(base + 'latest') || initial.id;
-    const value = JSON.parse(localStorage.getItem(base + id) || 'null') as Recovery | null;
+    // Recover only this draft's own backup. A previous "latest" fallback could offer
+    // a different draft's unsaved copy on a brand-new blank draft, so it was removed.
+    const value = JSON.parse(localStorage.getItem(base + initial.id) || 'null') as Recovery | null;
     if (!value || value.work.authorId !== initial.authorId || value.work.status !== 'draft' || typeof value.work.id !== 'string' || value.work.id.length > 100 || !Number.isFinite(value.savedAt) || !Number.isFinite(value.editedAt)) return null;
     if (!genres.includes(value.work.genre) || !workKinds.includes(value.work.kind) || !workStages.includes(value.work.stage)) return null;
     if (!['title', 'content', 'request', 'warning'].every(key => typeof value.work[key as keyof Work] === 'string') || value.work.content.length > 50000) return null;
@@ -43,12 +44,11 @@ export function useDraftAutosave(initial: Work, paused: boolean, onSaved?: () =>
     try {
       const current = latest.current, base = prefix(current.authorId);
       localStorage.setItem(base + current.id, JSON.stringify({ work: current, savedAt: serverStamp.current, editedAt: Date.now() }));
-      localStorage.setItem(base + 'latest', current.id);
       return true;
     } catch { return false; }
   }, []);
   const clearBackup = useCallback(() => {
-    try { const current = latest.current, base = prefix(current.authorId); localStorage.removeItem(base + current.id); if (localStorage.getItem(base + 'latest') === current.id) localStorage.removeItem(base + 'latest'); } catch { /* Storage can be unavailable. */ }
+    try { const current = latest.current, base = prefix(current.authorId); localStorage.removeItem(base + current.id); } catch { /* Storage can be unavailable. */ }
   }, []);
 
   const save = useCallback(async (): Promise<boolean> => {
@@ -119,6 +119,7 @@ export function useDraftAutosave(initial: Work, paused: boolean, onSaved?: () =>
   };
   const restore = () => {
     if (!recovery) return;
+    blocked.current = false;
     const same = recovery.work.id === initial.id;
     latest.current = recovery.work;
     serverStamp.current = same ? initial.createdAt : recovery.savedAt;
@@ -127,9 +128,11 @@ export function useDraftAutosave(initial: Work, paused: boolean, onSaved?: () =>
     setWork(recovery.work); setRecovery(null); setState(navigator.onLine ? 'waiting' : 'offline'); backup();
   };
   const discardRecovery = () => {
-    if (recovery) { try { const base = prefix(initial.authorId); localStorage.removeItem(base + recovery.work.id); if (localStorage.getItem(base + 'latest') === recovery.work.id) localStorage.removeItem(base + 'latest'); } catch { /* Best effort. */ } }
+    if (recovery) { try { localStorage.removeItem(prefix(initial.authorId) + recovery.work.id); } catch { /* Best effort. */ } }
     setRecovery(null);
   };
-  const published = () => { saved.current = draftFingerprint(latest.current); clearBackup(); };
-  return { work, update, state, savedAt, error, dirty, recovery, restore, discardRecovery, flush, retry: save, published, backupAvailable, serverStamp: () => serverStamp.current };
+  const published = () => { blocked.current = false; saved.current = draftFingerprint(latest.current); clearBackup(); };
+  // A blocked save (conflict/forbidden) must be retryable once the writer acts on it.
+  const retry = useCallback(() => { blocked.current = false; if (mounted.current) setState(navigator.onLine ? 'waiting' : 'offline'); return save(); }, [save]);
+  return { work, update, state, savedAt, error, dirty, recovery, restore, discardRecovery, flush, retry, published, backupAvailable, serverStamp: () => serverStamp.current };
 }

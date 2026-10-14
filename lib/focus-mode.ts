@@ -46,7 +46,9 @@ export function createFocusMode(doc: Document, onChange: (active: boolean) => vo
   function keydown(event: KeyboardEvent) {
     if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && owner === session) {
       const target = event.target as Element | null;
-      if (!target?.closest?.('[role="dialog"], [role="alertdialog"]')) session.exit();
+      // Escape that dismisses an open annotation tool should not also leave focus mode.
+      const dismissingAnnotation = typeof doc.querySelector === 'function' && !!doc.querySelector('.annotate-rail, .annotate-pop');
+      if (!target?.closest?.('[role="dialog"], [role="alertdialog"]') && !dismissingAnnotation) session.exit();
     }
   }
   doc.addEventListener('fullscreenchange', fullscreenChange);

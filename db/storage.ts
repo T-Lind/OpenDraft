@@ -17,7 +17,7 @@ export class Statement{
  values:unknown[]=[];
  constructor(public db:Database,public text:string){}
  bind(...values:unknown[]){this.values=values;return this;}
- get sql(){let i=0;return this.text.replace(/\?/g,()=>'$'+(++i));}
+ get sql(){let i=0;const count=(this.text.match(/\?/g)||[]).length;if(count!==this.values.length)throw new Error(`SQL placeholder mismatch: ${count} placeholders but ${this.values.length} bound values.`);return this.text.replace(/\?/g,()=>'$'+(++i));}
  async all(){return this.db.execute(this);}
  async run(){return this.all();}
  async first<T=Row>():Promise<T|null>{const r=await this.all();return(r.results[0] as T)||null;}
@@ -50,12 +50,13 @@ export class Database{
  const results=await this.sql.transaction([this.sql.query('SET LOCAL search_path TO public'),this.sql.query(statement.sql,statement.values)],{fullResults:true});
  return mapped(results[1]);
  }
- async batch(statements:Statement[]):Promise<Result[]>{
- // Serialize the short exchange transactions so credits and the global FIFO
- // queue stay consistent across concurrent publishes, reviews and withdrawals.
- if(this.pool)return this.pgTransaction(statements,true);
- const result=await this.sql.transaction([this.sql.query('SET LOCAL search_path TO public'),this.sql.query('SELECT pg_advisory_xact_lock(6821941)'),...statements.map(s=>this.sql.query(s.sql,s.values))],{fullResults:true,isolationLevel:'ReadCommitted'});
- return result.slice(2).map(mapped);
+ // Serialize exchange transactions (credits and the global FIFO queue) by default.
+ // Independent, single-user batches may pass lock=false to avoid contending on it.
+ async batch(statements:Statement[],lock=true):Promise<Result[]>{
+ if(this.pool)return this.pgTransaction(statements,lock);
+ const preamble=[this.sql.query('SET LOCAL search_path TO public'),...(lock?[this.sql.query('SELECT pg_advisory_xact_lock(6821941)')]:[])];
+ const result=await this.sql.transaction([...preamble,...statements.map(s=>this.sql.query(s.sql,s.values))],{fullResults:true,isolationLevel:'ReadCommitted'});
+ return result.slice(preamble.length).map(mapped);
  }
  async read(statements:Statement[]):Promise<Result[]>{
  if(this.pool)return this.pgTransaction(statements);

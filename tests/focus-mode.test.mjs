@@ -36,6 +36,11 @@ for(const options of [{refuse:true},{supported:false}]) {
  const b=browser();b.session.enter();b.session.dispose();assert.equal(b.root.dataset.opendraftFocus,undefined);assert.equal(b.doc.fullscreenElement,null,'leaving the view exits fullscreen');assert.deepEqual(b.changes,[true],'unmount does not update React state');
 }
 {
+ const b=browser();b.doc.querySelector=()=>true;b.session.enter();
+ const escape=new Event('keydown');Object.defineProperty(escape,'key',{value:'Escape'});b.doc.dispatchEvent(escape);
+ assert.deepEqual(b.changes,[true],'Escape that dismisses an annotation tool keeps focus mode');assert.equal(b.root.dataset.opendraftFocus,'true');b.session.dispose();
+}
+{
  const b=browser({delayed:true});b.session.enter();b.session.exit();b.grant();await tick();assert.equal(b.doc.fullscreenElement,null,'a late fullscreen grant is undone after leaving focus mode');assert.equal(b.root.dataset.opendraftFocus,undefined);b.session.dispose();
 }
 console.log('Focus mode lifecycle passed: click enter/exit, browser exit, denied/unsupported fullscreen, Escape fallback, navigation cleanup, and late fullscreen grants.');

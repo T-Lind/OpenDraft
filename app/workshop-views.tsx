@@ -334,7 +334,7 @@ function renderParagraph(plain: string, runs: InlineRun[], para: number, annos: 
   const boundaries = [...new Set([0, plain.length, ...relevant.flatMap(a => [a.start, a.end]), ...(draft?.para === para ? [draft.offset] : [])])].sort((a, b) => a - b);
   const out: ReactNode[] = [];
   const props = (a: WorkAnnotation) => a.id === '__pending__' ? {} : {
-    'data-annotation-id': a.id, role: 'button' as const, tabIndex: 0, 'aria-label': `${a.kind} by ${a.author}`,'aria-current':selectedId===a.id?true:undefined,
+    'data-annotation-id': a.id, role: 'button' as const, tabIndex: 0, 'aria-label': `${a.kind} by ${a.author}`,'aria-pressed':selectedId===a.id,
     onClick: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); onSelect(a); },
     onDoubleClick: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); if (canRemove && a.id.startsWith('local-')) onRemove(a.id); },
     onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {

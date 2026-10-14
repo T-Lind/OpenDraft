@@ -17,7 +17,7 @@ export async function communityRead(db:Database,uid:string,admin:boolean,params:
  if(section==='friends'){
   const mode=params.get('mode')||'accepted',after=cursor?' AND (created_at,id)<(?,?)':'';
   let sql='',values:unknown[]=[];
-  if(mode==='blocked'){sql="SELECT b.id,b.blocked_id AS user_id,p.name,'blocked'::text AS status,b.created_at FROM member_blocks b JOIN profiles p ON p.id=b.blocked_id WHERE b.user_id=?";values=[uid];}
+  if(mode==='blocked'){sql="SELECT b.id,b.blocked_id AS user_id,p.name,'blocked'::text AS status,b.created_at FROM member_blocks b JOIN profiles p ON p.id=b.blocked_id WHERE b.user_id=? AND p.deleted_at=0";values=[uid];}
   else{if(!['accepted','incoming','outgoing'].includes(mode))fail('Unknown friend list.');sql="SELECT f.id,CASE WHEN f.low_id=? THEN f.high_id ELSE f.low_id END AS user_id,p.name,f.status,f.updated_at AS created_at FROM friendships f JOIN profiles p ON p.id=CASE WHEN f.low_id=? THEN f.high_id ELSE f.low_id END WHERE (f.low_id=? OR f.high_id=?) AND p.deleted_at=0 AND "+(mode==='accepted'?"f.status='accepted'":mode==='incoming'?"f.status='pending' AND f.requester_id<>?":"f.status IN ('pending','rejected') AND f.requester_id=?");values=[uid,uid,uid,uid,...(mode==='accepted'?[]:[uid])];}
   const rows=(await db.prepare('SELECT * FROM ('+sql+') listed WHERE true'+after+' ORDER BY created_at DESC,id DESC LIMIT ?').bind(...values,...(cursor?[cursor.value,cursor.id]:[]),limit+1).all()).results;
   const page=pageOf(rows,limit);return {...page,items:page.items.map(camel)};

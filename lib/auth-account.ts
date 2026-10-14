@@ -12,7 +12,7 @@ export async function resolveGoogleAccount(db:Database,user:SessionUser):Promise
   await db.batch([
    db.prepare("UPDATE auth_identities SET email=?,last_used_at=? WHERE provider='google' AND subject=?").bind(email,now,subject),
    db.prepare("UPDATE profiles SET email=CASE WHEN email='' THEN ? ELSE email END WHERE id=?").bind(email,linked.profile_id),
-  ]);
+  ], false);
   return{id:linked.profile_id,email:linked.email||email,name:linked.name||'Writer',issuedAt:Number(linked.session_valid_after)||0};
  }
  const credential=await db.prepare('SELECT c.profile_id,p.name,p.email,p.session_valid_after FROM auth_credentials c JOIN profiles p ON p.id=c.profile_id WHERE c.email=? AND c.email_verified_at>0 AND p.deleted_at=0').bind(email).first<IdentityRow>();
@@ -21,6 +21,6 @@ export async function resolveGoogleAccount(db:Database,user:SessionUser):Promise
  await db.batch([
   db.prepare("INSERT INTO profiles(id,name,email,created_at) VALUES(?,'Writer',?,?) ON CONFLICT(id) DO UPDATE SET email=CASE WHEN profiles.email='' THEN excluded.email ELSE profiles.email END").bind(profileId,email,now),
   db.prepare("INSERT INTO auth_identities(provider,subject,profile_id,email,created_at,last_used_at) VALUES('google',?,?,?,?,?) ON CONFLICT(provider,subject) DO UPDATE SET profile_id=excluded.profile_id,email=excluded.email,last_used_at=excluded.last_used_at").bind(subject,profileId,email,now,now),
- ]);
+ ], false);
  return{id:profileId,email,name:credential?.name||legacy?.name||'Writer',issuedAt:Number(credential?.session_valid_after||legacy?.session_valid_after)||0};
 }

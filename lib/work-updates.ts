@@ -31,7 +31,7 @@ export async function changeWorkPreference(db:Database,uid:string,input:z.infer<
   db.prepare(`UPDATE work_preferences SET ${updates.join(',')},updated_at=? WHERE user_id=? AND work_id=? AND EXISTS(SELECT 1 FROM works w WHERE w.id=work_id AND w.version=? AND w.status NOT IN ('draft','withdrawn')) RETURNING work_id`).bind(...values,now,uid,input.workId,status.version),
   ...(input.read===true?[db.prepare("UPDATE work_notifications SET read_at=COALESCE(read_at,?),email_requested=false WHERE user_id=? AND work_id=? AND kind='reminder'").bind(now,uid,input.workId)]:[]),
   ...(input.emailUpdates===false?[db.prepare('UPDATE work_notifications SET email_requested=false WHERE user_id=? AND work_id=? AND email_sent_at IS NULL').bind(uid,input.workId)]:[]),
- ]).then(result=>{if(!result[1].meta.changes)fail('This work changed. Refresh before changing its reading options.',409);});
+ ], false).then(result=>{if(!result[1].meta.changes)fail('This work changed. Refresh before changing its reading options.',409);});
  return workPreferenceStatus(db,uid,input.workId);
 }
 export async function enqueueReadingReminders(db:Database,uid?:string,now=Date.now()){
@@ -43,7 +43,7 @@ export async function enqueueReadingReminders(db:Database,uid?:string,now=Date.n
   INSERT INTO work_notifications(user_id,work_id,target_work_id,event_key,kind,feed,created_at,email_requested)
   SELECT user_id,work_id,work_id,'reminder:'||work_id||':'||reminder_at,'reminder',true,?,email_updates FROM due ON CONFLICT(user_id,event_key) DO NOTHING RETURNING id
  ) UPDATE work_preferences s SET reminder_fired_at=s.reminder_at FROM due WHERE s.user_id=due.user_id AND s.work_id=due.work_id AND s.reminder_at=due.reminder_at RETURNING s.work_id`).bind(now,...(uid?[uid]:[]),now);
- return (await db.batch([statement]))[0];
+ return (await db.batch([statement],false))[0];
 }
 export const visibleWorkNotificationsSQL="FROM work_notifications n JOIN works w ON w.id=n.work_id JOIN works target ON target.id=n.target_work_id WHERE n.user_id=? AND n.feed=true AND (n.review_id IS NULL OR EXISTS(SELECT 1 FROM reviews r WHERE r.id=n.review_id AND (w.critique_visibility='public' OR w.author_id=n.user_id OR r.user_id=n.user_id))) AND w.status NOT IN ('draft','withdrawn') AND target.status NOT IN ('draft','withdrawn') AND NOT EXISTS(SELECT 1 FROM member_blocks b WHERE (b.user_id=n.user_id AND b.blocked_id=w.author_id) OR (b.user_id=w.author_id AND b.blocked_id=n.user_id))";
 const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
@@ -61,7 +61,7 @@ export async function verifyUnsubscribeToken(token:string,now=Date.now()){
 }
 export async function unsubscribeWorkEmail(db:Database,token:string){
  const {uid,workId}=await verifyUnsubscribeToken(token);
- await db.batch([db.prepare('UPDATE work_preferences SET email_updates=false,updated_at=? WHERE user_id=? AND work_id=?').bind(Date.now(),uid,workId),db.prepare('UPDATE work_notifications SET email_requested=false WHERE user_id=? AND work_id=? AND email_sent_at IS NULL').bind(uid,workId)]);
+ await db.batch([db.prepare('UPDATE work_preferences SET email_updates=false,updated_at=? WHERE user_id=? AND work_id=?').bind(Date.now(),uid,workId),db.prepare('UPDATE work_notifications SET email_requested=false WHERE user_id=? AND work_id=? AND email_sent_at IS NULL').bind(uid,workId)], false);
 }
 export async function deliverWorkEmails(db:Database,now=Date.now()){
  if(!mailConfigured())return {sent:0,configured:false};

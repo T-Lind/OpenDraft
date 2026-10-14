@@ -33,6 +33,8 @@ export async function POST(request:Request){
   await rateLimit(db,'community-write:'+uid,60,60000,now);
   const id=()=>z.string().min(1).max(100).parse(b.id);
   const audit=(target:string,reason='',details='')=>db.prepare('INSERT INTO admin_actions(id,admin_id,action,target_id,reason,details,created_at) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),uid,action,target,reason,details,now);
+  // Record the audit entry only after the guarded mutation actually changed a row.
+  const commitAudit=async(statement:ReturnType<typeof audit>)=>{try{await statement.run();}catch{console.error('Administrative audit entry could not be saved.');}};
   if(action==='acceptTerms'){
    if(b.accepted!==true||b.version!==TERMS_VERSION)fail('Please confirm the current terms and privacy policy.');
    await db.prepare('UPDATE profiles SET terms_version=?,terms_accepted_at=? WHERE id=? AND deleted_at=0').bind(TERMS_VERSION,now,uid).run();return json({ok:true,version:TERMS_VERSION});
@@ -68,13 +70,14 @@ export async function POST(request:Request){
    const table=action==='resolveCase'||action==='redactCase'?'message_reports':'legal_requests';
    const redact=action.startsWith('redact');
    const statement=redact?db.prepare("UPDATE "+table+" SET body='[Evidence removed after retention review]',"+(table==='legal_requests'?"name='Contact details removed',email='',":"reason='[Report details removed after retention review]',")+"resolution=resolution||? WHERE id=? AND status='resolved' AND body<>'[Evidence removed after retention review]'").bind('\nRetention review '+new Date(now).toISOString()+': '+reason,caseId):db.prepare("UPDATE "+table+" SET status='resolved',resolution=?,resolved_at=? WHERE id=? AND status='open'").bind(reason,now,caseId);
-   const result=await db.batch([statement,audit(caseId,reason)]);
-   if(!result[0].meta.changes)fail('This request already changed or is unavailable. Resolve an open case before removing its evidence.',409);return json({ok:true});
+   const result=await db.batch([statement]);
+   if(!result[0].meta.changes)fail('This request already changed or is unavailable. Resolve an open case before removing its evidence.',409);
+   await commitAudit(audit(caseId,reason));return json({ok:true});
   }
   requireTerms(profile);
   if(action==='adoptCircle'){
    if(!isAdmin)fail('Administrator access is required.',403);
-   const circleId=id();const result=await db.batch([db.prepare("UPDATE circles SET owner_id=? WHERE id=? AND owner_id='system'").bind(uid,circleId),db.prepare("INSERT INTO memberships(id,user_id,circle_id) SELECT ?,?,id FROM circles WHERE id=? AND owner_id=? ON CONFLICT(user_id,circle_id) DO NOTHING").bind(crypto.randomUUID(),uid,circleId,uid),audit(circleId,z.string().trim().min(5).max(500).parse(b.reason))]);if(!result[0].meta.changes)fail('This circle already has an owner.',409);return json({ok:true});
+   const circleId=id();const result=await db.batch([db.prepare("UPDATE circles SET owner_id=? WHERE id=? AND owner_id='system'").bind(uid,circleId),db.prepare("INSERT INTO memberships(id,user_id,circle_id) SELECT ?,?,id FROM circles WHERE id=? AND owner_id=? ON CONFLICT(user_id,circle_id) DO NOTHING").bind(crypto.randomUUID(),uid,circleId,uid)]);if(!result[0].meta.changes)fail('This circle already has an owner.',409);await commitAudit(audit(circleId,z.string().trim().min(5).max(500).parse(b.reason)));return json({ok:true});
   }
   if(['friendRequest','acceptFriend','rejectFriend','cancelFriend','removeFriend'].includes(action)){
    const other=id();if(other===uid)fail('You cannot send yourself a friend request.');
@@ -113,7 +116,7 @@ export async function POST(request:Request){
     if(Number(work.ai_assessed_at)>now-86400000&&work.ai_assessment)return json({ok:true,assessment:JSON.parse(String(work.ai_assessment)),cached:true});
     await rateLimit(db,'jev-global',5,86400000,now);
     const assessment=await evaluateShowcase(String(work.content),String(work.request),process.env.VERCEL==='1'?request.headers.get('x-vercel-oidc-token'):null);
-    const result=await db.batch([db.prepare("UPDATE works SET ai_assessment=?,ai_assessed_at=? WHERE id=? AND showcase_opt_in=true AND status NOT IN ('draft','withdrawn')").bind(JSON.stringify(assessment),now,workId),audit(workId,'Automated checks showcase evaluation under accepted workshop terms.')]);if(!result[0].meta.changes)fail('Consent or availability changed during evaluation. The assessment was not saved.',409);
+    const result=await db.batch([db.prepare("UPDATE works SET ai_assessment=?,ai_assessed_at=? WHERE id=? AND showcase_opt_in=true AND status NOT IN ('draft','withdrawn')").bind(JSON.stringify(assessment),now,workId)]);if(!result[0].meta.changes)fail('Consent or availability changed during evaluation. The assessment was not saved.',409);await commitAudit(audit(workId,'Automated checks showcase evaluation under accepted workshop terms.'));
     return json({ok:true,assessment});
    }
    const day=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(b.day),date=Date.parse(day+'T00:00:00Z'),today=Date.parse(new Date(now).toISOString().slice(0,10)+'T00:00:00Z');
@@ -121,7 +124,7 @@ export async function POST(request:Request){
    const note=z.string().trim().min(10).max(500).parse(b.note);
    const alternativeEligibility=showcaseEligibility.replaceAll("w.","alternative.").replaceAll("p.","other_profile.");
    const rotation=" AND (w.genre NOT IN (SELECT genre FROM adjacent_genres) OR NOT EXISTS(SELECT 1 FROM works alternative JOIN profiles other_profile ON other_profile.id=alternative.author_id CROSS JOIN selection WHERE "+alternativeEligibility+" AND alternative.genre NOT IN (SELECT genre FROM adjacent_genres) AND NOT EXISTS(SELECT 1 FROM showcases booked JOIN works featured ON featured.id=booked.work_id WHERE featured.author_id=alternative.author_id AND booked.day::date<>selection.day AND booked.day::date BETWEEN selection.day-29 AND selection.day+29)))";
-   const result=await db.batch([db.prepare("WITH selection AS (SELECT ?::date AS day), adjacent_genres AS (SELECT previous.genre FROM showcases booked JOIN works previous ON previous.id=booked.work_id CROSS JOIN selection WHERE booked.day::date IN (selection.day-1,selection.day+1)) INSERT INTO showcases(day,work_id,admin_id,note,created_at) SELECT ?,w.id,?,?,? FROM works w JOIN profiles p ON p.id=w.author_id WHERE w.id=? AND "+showcaseEligibility+" AND NOT EXISTS(SELECT 1 FROM showcases s JOIN works previous ON previous.id=s.work_id WHERE previous.author_id=w.author_id AND s.day<>? AND s.day::date BETWEEN (?::date-29) AND (?::date+29)) "+rotation+" ON CONFLICT(day) DO UPDATE SET work_id=excluded.work_id,admin_id=excluded.admin_id,note=excluded.note,created_at=excluded.created_at").bind(day,day,uid,note,now,workId,day,day,day),audit(workId,'Showcase selection requested by an operator.',JSON.stringify({day}))]);if(!result[0].meta.changes)fail('Choose another author or genre for this date, or refresh the available candidates.',409);return json({ok:true});
+   const result=await db.batch([db.prepare("WITH selection AS (SELECT ?::date AS day), adjacent_genres AS (SELECT previous.genre FROM showcases booked JOIN works previous ON previous.id=booked.work_id CROSS JOIN selection WHERE booked.day::date IN (selection.day-1,selection.day+1)) INSERT INTO showcases(day,work_id,admin_id,note,created_at) SELECT ?,w.id,?,?,? FROM works w JOIN profiles p ON p.id=w.author_id WHERE w.id=? AND "+showcaseEligibility+" AND NOT EXISTS(SELECT 1 FROM showcases s JOIN works previous ON previous.id=s.work_id WHERE previous.author_id=w.author_id AND s.day<>? AND s.day::date BETWEEN (?::date-29) AND (?::date+29)) "+rotation+" ON CONFLICT(day) DO UPDATE SET work_id=excluded.work_id,admin_id=excluded.admin_id,note=excluded.note,created_at=excluded.created_at").bind(day,day,uid,note,now,workId,day,day,day)]);if(!result[0].meta.changes)fail('Choose another author or genre for this date, or refresh the available candidates.',409);await commitAudit(audit(workId,'Showcase selection requested by an operator.',JSON.stringify({day})));return json({ok:true});
   }
   fail('Unknown community action.');
  }catch(e){return error(e);}

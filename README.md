@@ -1,3 +1,15 @@
+# Review fixes (October 14, 2026)
+
+A security and correctness pass. No policy or product behavior changed.
+
+Authentication: re-registering an email that already has an unverified account no longer replaces that account's password; it only resends the verification link, so an unauthenticated request can never set or overwrite the password of an account it does not control. In production, one-time verify/reset links require the configured `AUTH_APP_URL` instead of falling back to the request Host.
+
+Draft autosave: a conflict or forbidden save is now retryable instead of permanently disabling autosave for the session, and recovery only ever offers the backup that belongs to the draft being opened (the previous fallback could load a different draft's unsaved copy into a brand-new blank draft and adopt its id).
+
+Reading and moderation: a block between either critique participant now hides the whole conversation; deleted accounts no longer appear in a member's blocked list; failed or no-op operator case/showcase actions no longer write a false audit entry; `notifications` and `work-updates` GETs are rate limited because they materialize reminders and drain mail.
+
+Infrastructure: the shared advisory lock is dropped from independent single-user batches (critique drafts, replies, reading preferences, auth tokens, reminder materialization) so they no longer serialize behind publishing; the SQL binder now rejects a placeholder/bind-count mismatch instead of silently corrupting a literal `?`. Migration 0025 adds the missing `works(larger_work_id)` and `works(genre,status,created_at,id)` indexes and re-asserts three check constraints that existed in the database but were missing from `db/schema.ts`. Apply migration 0025 before running this code against an existing database.
+
 # Workshop refinements (October 10, 2026)
 
 Terms version 2026-10-10.1 explains private server autosave for unfinished critiques, conversations, and larger-work subscriptions. Updated acceptance is required before syncing feedback or sharing contributions.
@@ -229,7 +241,8 @@ submission settings, process disclosure, and private autosave. A revision create
 from a published work opens a workspace containing the prior version's line notes;
 the writer can mark each open, resolved, kept as written, or deferred to another
 draft and add a private response. Review submission requires a human-judgment
-attestation and either a human-only or assistive-tools disclosure. OpenDraft does
+attestation that the reviewer read the work and stands behind every point;
+critiques are recorded as human-written. OpenDraft does
 not use an automated AI detector for enforcement; suspected misuse is reported
 and reviewed by a person.
 

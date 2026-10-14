@@ -88,6 +88,7 @@ export default function Workshop() {
   const [view, setView] = useState('Dashboard');
   const [selected, setSelected] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sort, setSort] = useState('Reading room first');
   const [browse,setBrowse]=useState({kind:'',stage:'',length:'',focus:'',available:false});
   const [genreFilter, setGenreFilter] = useState('All genres');
@@ -114,6 +115,7 @@ export default function Workshop() {
   const [adminRequests,setAdminRequests]=useState({cases:0,legal:0});
   const gPending = useRef(false);
   const moreOrigin = useRef('Dashboard');
+  const [booted, setBooted] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError('');
@@ -122,6 +124,7 @@ export default function Workshop() {
       const d = await r.json() as Snapshot & { error?: string };
       if (!r.ok) throw new Error(d.error);
       setData(d);
+      setBooted(true);
     } catch (e) {
       setLoadError((e as Error).name === 'TimeoutError' ? 'The workshop is taking too long to respond. Please retry.' : (e as Error).message || 'The workshop could not load.');
     } finally {
@@ -160,6 +163,9 @@ export default function Workshop() {
   }, [load]);
 
   useEffect(() => { if (!toast || toastError || toastPaused) return; const timer = setTimeout(() => setToast(''), 8000); return () => clearTimeout(timer); }, [toast, toastError, toastPaused]);
+
+  // Debounce the Explore/Saved search so each keystroke does not refetch the list.
+  useEffect(() => { const timer = setTimeout(() => setDebouncedSearch(search), 250); return () => clearTimeout(timer); }, [search]);
 
   const go = useCallback((v: string, id = '') => {
     setView(v);
@@ -211,9 +217,9 @@ export default function Workshop() {
 
   const bookmark = useCallback(async (workId: string, savedNow: boolean) => {
     if (!data.user) { setLogin(true); return; }
-    const previous = data.bookmarks;
-    const next = savedNow ? previous.filter(id => id !== workId) : [...previous, workId];
-    setData(d => ({ ...d, bookmarks: next }));
+    // Optimistically update from the latest state, and roll back only this work id
+    // so two quick bookmarks cannot clobber each other.
+    setData(d => ({ ...d, bookmarks: savedNow ? d.bookmarks.filter(id => id !== workId) : (d.bookmarks.includes(workId) ? d.bookmarks : [...d.bookmarks, workId]) }));
     try {
       const r = await fetch('/api/workshop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'bookmark', workId, saved: !savedNow }) });
       if (!r.ok) { const err = await r.json().catch(() => ({})) as { error?: string }; throw new Error(err.error || 'Could not save.'); }
@@ -222,10 +228,10 @@ export default function Workshop() {
       setRevision(n=>n+1);
       setToastError(false); setToast(savedNow ? 'Bookmark removed.' : 'Work saved to your reading list.');
     } catch (e) {
-      setData(d => ({ ...d, bookmarks: previous }));
+      setData(d => ({ ...d, bookmarks: savedNow ? (d.bookmarks.includes(workId) ? d.bookmarks : [...d.bookmarks, workId]) : d.bookmarks.filter(id => id !== workId) }));
       setToastError(true); setToast((e as Error).message || 'Could not save your bookmark. Please try again.');
     }
-  }, [data.user, data.bookmarks]);
+  }, [data.user]);
 
   const newDraft = () => {
     if (!data.user) { setLogin(true); return; }
@@ -241,7 +247,7 @@ export default function Workshop() {
   };
 
   const listMode=view==='My writing'?'mine':view==='Saved works'?'saved':'explore';
-  const workPage=usePagedList<Work>('/api/workshop?collection=works&'+new URLSearchParams({...(view==='Explore'?{kind:browse.kind,stage:browse.stage,length:browse.length,focus:browse.focus,available:String(browse.available)}:{}),mode:listMode,q:search,genre:view==='Explore'?genreFilter:'All genres',sort:view==='My writing'?'Newest first':sort}),!!data.user&&['Explore','Saved works','My writing'].includes(view),revision);
+  const workPage=usePagedList<Work>('/api/workshop?collection=works&'+new URLSearchParams({...(view==='Explore'?{kind:browse.kind,stage:browse.stage,length:browse.length,focus:browse.focus,available:String(browse.available)}:{}),mode:listMode,q:debouncedSearch,genre:view==='Explore'?genreFilter:'All genres',sort:view==='My writing'?'Newest first':sort}),!!data.user&&['Explore','Saved works','My writing'].includes(view),revision);
   const givenPage=usePagedList<Snapshot['reviews'][number]>('/api/workshop?collection=reviews&mode=given',!!data.user&&view==='My critiques',revision);
   const eventPage=usePagedList<Snapshot['events'][number]>('/api/workshop?collection=events',!!data.user&&view==='Credit history',revision);
   const analyticsPage=usePagedList<Analytics['works'][number]&{id:string}>('/api/workshop?collection=analytics',!!data.user&&view==='Analytics',revision);
@@ -287,7 +293,7 @@ export default function Workshop() {
     return <div className="boot-splash"><span className="app-brand">Open<em>Draft</em><b>.</b></span><div className="loading-indicator" role="status"><LoaderCircle size={14} className="animate-spin" />Connecting to the workshop…</div></div>;
   }
 
-  if (loadError) {
+  if (loadError && !booted) {
     return <div className="boot-splash"><span className="app-brand">Open<em>Draft</em><b>.</b></span><p role="alert">{loadError}</p><Button className="primary-button" onClick={() => { setLoading(true); void load(); }}>Retry connection</Button><a href="/api/auth/logout">Sign out</a></div>;
   }
 
