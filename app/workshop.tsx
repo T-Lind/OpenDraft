@@ -33,6 +33,7 @@ import {NextSteps} from '@/components/next-steps';
 import {BrowseFilters} from '@/components/browse-filters';
 import {CritiqueDrafts} from '@/components/critique-drafts';
 import { CritiquePilotReview } from '@/components/critique-quality';
+import { SignOutButton } from '@/components/sign-out';
 
 export type Snapshot = {
   user: { id: string; name: string; bio: string; credits: number; avatarUpdatedAt?: number; termsVersion?:string; friendsOnly?:boolean; onboardingCompleted?: boolean; age?: number | null; sex?: string; location?: string; interests?: string; currentStreak?: number; longestStreak?: number } | null;
@@ -141,6 +142,12 @@ export default function Workshop() {
         cancelled: 'Google sign-in was cancelled. You can try again whenever you’re ready.',
         invalid_state: 'Your sign-in attempt expired or belongs to another browser. Please start again.',
         not_configured: 'Sign-in is temporarily unavailable. Please try again later.',
+        invalid_verification: 'That verification link is invalid or has already been used. Sign in, or choose “Resend verification email.”',
+        verification_failed: 'We could not verify that email link. Please try again or request a new one.',
+        missing_code: 'Google did not return a sign-in code. Please try again.',
+        exchange_failed: 'Google sign-in could not be completed. Please try again.',
+        no_user: 'Google did not return an account. Please try again.',
+        callback_failed: 'Sign-in could not be completed. Please try again.',
       };
       setAuthError(errors[params.get('auth_error') || ''] || 'Sign in could not be completed. Please try again.');
       params.delete('auth_error');
@@ -294,7 +301,7 @@ export default function Workshop() {
   }
 
   if (loadError && !booted) {
-    return <div className="boot-splash"><span className="app-brand">Open<em>Draft</em><b>.</b></span><p role="alert">{loadError}</p><Button className="primary-button" onClick={() => { setLoading(true); void load(); }}>Retry connection</Button><a href="/api/auth/logout">Sign out</a></div>;
+    return <div className="boot-splash"><span className="app-brand">Open<em>Draft</em><b>.</b></span><p role="alert">{loadError}</p><Button className="primary-button" onClick={() => { setLoading(true); void load(); }}>Retry connection</Button><SignOutButton>Sign out</SignOutButton></div>;
   }
 
   if (!data.user) {
@@ -353,7 +360,7 @@ export default function Workshop() {
           ))}
           {data.isAdmin && <button className={'side-link admin-link' + (isNav('Admin') ? ' active' : '')} aria-current={isNav('Admin') ? 'page' : undefined} onClick={() => go('Admin')}><ShieldCheck /><span>Admin dashboard</span>{adminRequests.cases+adminRequests.legal>0&&<span className="nav-badge">{adminRequests.cases+adminRequests.legal}</span>}</button>}
         </nav>
-        <div className="sidebar-footer"><p className="side-foot"><button onClick={() => setAbout(true)}>Open source &amp; free</button> — a workshop that belongs to its writers.</p><a href="/api/auth/logout" className="sidebar-signout" title="Sign out" aria-label="Sign out"><LogOut size={17} /><span>Sign out</span></a></div>
+        <div className="sidebar-footer"><p className="side-foot"><button onClick={() => setAbout(true)}>Open source &amp; free</button> — a workshop that belongs to its writers.</p><SignOutButton className="sidebar-signout" title="Sign out" aria-label="Sign out"><LogOut size={17} /><span>Sign out</span></SignOutButton></div>
       </aside>
 
       <div className="main-shell">
@@ -552,7 +559,7 @@ export default function Workshop() {
             {[primaryNav[4], primaryNav[2], secondaryNav[2], secondaryNav[1], primaryNav[5], secondaryNav[3], secondaryNav[4], ...(data.isAdmin ? [{ icon: ShieldCheck, label: 'Admin dashboard', view: 'Admin' }] : [])].map(({ icon: Icon, label, view: destination }) => <button key={destination} type="button" onClick={() => go(destination)}><Icon size={20}/><span>{label}</span>{destination === 'Friends' && friendRequests > 0 && <span className="nav-badge">{friendRequests}</span>}<ChevronRight size={16}/></button>)}
           </nav>
           <ReadingSettings/>
-          <div className="more-help"><button type="button" className="text-link" onClick={() => { setMoreOpen(false); setFeedbackKind('bug'); }}><Bug size={16}/>Report a bug</button><button type="button" className="text-link" onClick={() => { setMoreOpen(false); setFeedbackKind('feature'); }}><Lightbulb size={16}/>Suggest a feature</button><a className="text-link" href="/api/auth/logout"><LogOut size={16}/>Sign out</a></div>
+          <div className="more-help"><button type="button" className="text-link" onClick={() => { setMoreOpen(false); setFeedbackKind('bug'); }}><Bug size={16}/>Report a bug</button><button type="button" className="text-link" onClick={() => { setMoreOpen(false); setFeedbackKind('feature'); }}><Lightbulb size={16}/>Suggest a feature</button><SignOutButton className="text-link"><LogOut size={16}/>Sign out</SignOutButton></div>
         </DialogContent>
       </Dialog>
 
@@ -1008,14 +1015,15 @@ function WorkRow({ work: w, saved, busy, onSave, onRead, onAuthor, compact, feat
 }
 
 function Landing({ googleConfigured,emailPasswordConfigured,sourceRepositoryUrl,error }: { googleConfigured: boolean;emailPasswordConfigured:boolean;sourceRepositoryUrl:string; error: string }) {
-  const [authOpen,setAuthOpen]=useState(false);
+  const [authOpen,setAuthOpen]=useState(false),[authMode,setAuthMode]=useState<'login'|'register'>('login');
+  const openAuth=(mode:'login'|'register')=>{setAuthMode(mode);setAuthOpen(true);};
   return (
     <div className="landing">
       <header className="landing-top">
         <span className="app-brand landing-brand">Open<em>Draft</em><b>.</b></span>
         <div className="landing-nav">
-          <button className="landing-link" onClick={()=>setAuthOpen(true)}>Sign in</button>
-          <Button className="primary-button" onClick={()=>setAuthOpen(true)}>Join OpenDraft</Button>
+          <button className="landing-link" onClick={()=>openAuth('login')}>Sign in</button>
+          <Button className="primary-button" onClick={()=>openAuth('register')}>Join OpenDraft</Button>
         </div>
       </header>
       <section className="landing-hero">
@@ -1024,7 +1032,7 @@ function Landing({ googleConfigured,emailPasswordConfigured,sourceRepositoryUrl,
           <h1>Write. Read. Help someone’s next draft.</h1>
           <p>OpenDraft is a free, open-source writing workshop. Exchange thoughtful, line-level critiques with other writers, earn credits for the feedback you give, and spend them on your own work.</p>
           <div className="landing-actions">
-            <Button className="primary-button landing-cta" onClick={()=>setAuthOpen(true)}>Start writing</Button>
+            <Button className="primary-button landing-cta" onClick={()=>openAuth('register')}>Start writing</Button>
             <span className="fine-print">Free with Google or a verified email account.</span>
           </div>
           {error && <p className="auth-setup-note" role="alert"><AlertCircle size={13} />{error}</p>}
@@ -1045,7 +1053,7 @@ function Landing({ googleConfigured,emailPasswordConfigured,sourceRepositoryUrl,
         <article><h3>Open and free</h3><p>MIT licensed, self-hostable, and built for writers. No ads or paid shortcuts. You keep ownership of your writing.</p></article>
       </section>
       <footer className="landing-foot">OpenDraft · MIT licensed software · <Link href="/rights">Your writing remains yours</Link> · <Link href="/terms">Terms</Link> · <Link href="/privacy">Privacy</Link> · <Link href="/contact">Contact</Link>{sourceRepositoryUrl&&<> · <a href={sourceRepositoryUrl} target="_blank" rel="noreferrer">Source code</a></>}</footer>
-      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} googleConfigured={googleConfigured} emailPasswordConfigured={emailPasswordConfigured} returnTo="/#Dashboard"/>
+      <AuthDialog key={authMode} open={authOpen} onOpenChange={setAuthOpen} googleConfigured={googleConfigured} emailPasswordConfigured={emailPasswordConfigured} returnTo="/#Dashboard" initialMode={authMode}/>
     </div>
   );
 }

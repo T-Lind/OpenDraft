@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { genres } from './data';
 import type { Act, Snapshot } from './workshop';
 import { AvatarUpload } from '@/components/avatar-upload';
+import { SignOutButton } from '@/components/sign-out';
 import {TERMS_VERSION} from '@/lib/workshop-policy';
 import {JevTermsNotice} from '@/components/jev-terms-notice';
 
@@ -29,7 +30,7 @@ export function Onboarding({ user, act, busy, error, onComplete }: {
     if (saved) onComplete();
   }
   return <main className="onboarding-shell">
-    <header className="onboarding-top"><span className="app-brand">Open<em>Draft</em><b>.</b></span><a href="/api/auth/logout">Sign out</a></header>
+    <header className="onboarding-top"><span className="app-brand">Open<em>Draft</em><b>.</b></span><SignOutButton>Sign out</SignOutButton></header>
     <section className="onboarding-card" aria-labelledby="onboarding-title">
       <ol className="onboarding-progress" aria-label="Profile setup progress">
         {['Your name', 'Your writing', 'Welcome'].map((label, index) => <li key={label} aria-current={step === index ? 'step' : undefined} className={index <= step ? 'active' : ''}>
@@ -56,6 +57,7 @@ export function Onboarding({ user, act, busy, error, onComplete }: {
           <div className="onboarding-genres" role="group" aria-label="Writing genres">
             {genres.slice(1).map(genre => <button key={genre} type="button" aria-pressed={selectedGenres.includes(genre)} onClick={() => toggleGenre(genre)}>{genre}</button>)}
           </div>
+          {selectedGenres.length>=5&&<p className="fine-print">Five genres selected. Deselect one to choose another.</p>}
           <label htmlFor="welcome-interests">Other writing interests <span className="fine-print">(optional)</span></label>
           <Textarea id="welcome-interests" value={interests} onChange={e => setInterests(e.target.value)} maxLength={200} rows={3} placeholder="Character-driven stories, nature poetry, building new worlds…" />
           <p className="fine-print">These interests are shared on your profile. You can edit them in Your account.</p>

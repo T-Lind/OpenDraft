@@ -16,7 +16,7 @@ export async function GET(request:Request){
  try{
   await requestRateLimit(request,'community-read',90,60000);
   const db=database(),params=new URL(request.url).searchParams,section=params.get('section');
-  if(section==='reputation'){const ids=[...new Set((params.get('ids')||'').split(',').filter(Boolean))];if(ids.length>20||ids.some(id=>id.length>100))fail('Choose at most 20 reviewers.');return json({items:await reputations(db,ids)});}
+  if(section==='reputation'){await requestRateLimit(request,'reputation',60,60_000);const ids=[...new Set((params.get('ids')||'').split(',').filter(Boolean))];if(ids.length>20||ids.some(id=>id.length>100))fail('Choose at most 20 reviewers.');return json({items:await reputations(db,ids)});}
   if(section==='showcase'){
    const row=await db.prepare('SELECT s.day,s.note,w.id,w.title,w.author,w.author_id,w.genre,w.kind,w.words,w.warning,w.mature FROM showcases s JOIN works w ON w.id=s.work_id JOIN profiles p ON p.id=w.author_id WHERE s.day=? AND '+showcaseEligibility).bind(new Date().toISOString().slice(0,10)).first();return json({showcase:row?camel(row):null});
   }

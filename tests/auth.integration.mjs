@@ -118,7 +118,7 @@ try {
    await auth.createSession({ ...user, issuedAt: replacementIssuedAt });
    ok((await auth.getSessionUser())?.issuedAt === replacementIssuedAt, 'replacement session honors the post-revocation validity timestamp');
   jar.set('__sites_local_auth', { value: '1' });
-  await logout.GET();
+  await logout.POST(new Request('https://opendraft.test/api/auth/logout',{method:'POST',headers:{Origin:'https://opendraft.test'}}));
   ok(jar.size === 0 && await auth.getSessionUser() === null, 'logout clears sessions and preview identity');
   response = await login.GET(request('/api/auth/login'));
   const cancelledState = new URL(response.headers.get('Location')).searchParams.get('state');

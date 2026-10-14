@@ -1,5 +1,6 @@
 import { database } from '@/db/storage';
 import { queryCollection } from '@/lib/workshop-query';
+import { requestRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,7 @@ function camel(row: Row): Row {
 
 export async function GET(request: Request) {
   try {
+    await requestRateLimit(request, 'author', 90, 60_000);
     const id = (new URL(request.url).searchParams.get('id') || '').trim().slice(0, 100);
     if (!id) return Response.json({ error: 'A writer id is required.' }, { status: 400 });
     const db = database();

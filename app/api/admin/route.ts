@@ -87,6 +87,7 @@ export async function GET(request?:Request) {
     }
     return json(await overview(db));
   } catch (e) {
+    if(e instanceof z.ZodError)return json({error:e.issues[0]?.message||'Invalid request.'},400);
     if((e as {status?:number}).status)return json({error:(e as Error).message},(e as {status:number}).status);
     console.error('Admin read:', e);
     return json({ error: 'The admin dashboard could not load.' }, 503);

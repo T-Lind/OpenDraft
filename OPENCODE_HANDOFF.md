@@ -4,6 +4,8 @@ Security/correctness pass; no policy or product change. Re-registering an email 
 
 Follow-up: rejected/administrator-no-op actions no longer record a false `admin_actions` row (and malformed admin requests return 400); verify-email redirects returning members to the dashboard; the sign-in dialog offers a resend-verification button; the consent screen shows the real policy version; rich paste honors an explicit `font-weight:normal` wrapper so Google Docs text is not fully bolded; sliced inline runs carry correct offsets; the account-review empty state is suppressed on error; a malformed stored showcase assessment no longer crashes the operator panel; the public avatar endpoint is rate limited. `tests/workshop.integration.mjs` now asserts that a rejected admin action writes no audit entry.
 
+Sign-up/hardening: landing CTAs open create-account mode; verification-failure redirects get specific copy; registration conflicts offer a switch to sign-in; onboarding explains the five-genre cap. Logout is POST-only with an Origin check (`components/sign-out.tsx` posts and reloads); `tests/auth.integration.mjs` now calls `logout.POST`. Public author and reputation lookups are rate limited; invalid admin `id` returns 400.
+
 # Workshop refinements (October 10, 2026)
 
 Terms version 2026-10-10.1 explains private server autosave for unfinished critiques, conversations, and larger-work subscriptions. Updated acceptance is required before syncing feedback or sharing contributions.
