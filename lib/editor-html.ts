@@ -12,7 +12,11 @@ export function cleanEditorHtml(html: string, doc: Document): string {
     if (blocked.has(el.tagName)) return;
     if (el.tagName === 'BR') { into.appendChild(doc.createElement('br')); return; }
     const tags: string[] = [];
-    if (['B','STRONG'].includes(el.tagName) || /^(bold|[6-9]00)$/.test(el.style.fontWeight)) tags.push('strong');
+    // An explicit normal weight (for example Google Docs' <b style="font-weight:normal"> wrapper)
+    // must override the tag, or a whole paste is wrongly bolded.
+    const weight = (el.style.fontWeight || '').trim().toLowerCase();
+    const explicitNormal = weight === 'normal' || weight === '400';
+    if ((!explicitNormal && ['B','STRONG'].includes(el.tagName)) || /^(bold|[6-9]00)$/.test(weight)) tags.push('strong');
     if (['I','EM'].includes(el.tagName) || el.style.fontStyle === 'italic') tags.push('em');
     if (el.tagName === 'U' || el.style.textDecorationLine.includes('underline') || el.style.textDecoration.includes('underline')) tags.push('u');
     let parent = into;

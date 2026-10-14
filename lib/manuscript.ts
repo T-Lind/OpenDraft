@@ -12,5 +12,8 @@ export function inlineRuns(raw: string): InlineRun[] {
   });
 }
 export function inlineSlice(runs: InlineRun[], start: number, end: number): InlineRun[] {
-  return runs.filter(run => run.start < end && run.end > start).map(run => ({ ...run, text: run.text.slice(Math.max(0, start - run.start), Math.min(run.text.length, end - run.start)) }));
+  return runs.filter(run => run.start < end && run.end > start).map(run => {
+    const from = Math.max(0, start - run.start), to = Math.min(run.text.length, end - run.start);
+    return { ...run, text: run.text.slice(from, to), start: run.start + from, end: run.start + to };
+  });
 }

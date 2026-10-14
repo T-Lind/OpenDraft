@@ -140,12 +140,14 @@ export async function POST(request: Request) {
       return json({ error: 'Unknown admin action.' }, 400);
     }
     if (b.action==='withdrawWork'||b.action==='restoreWork') statements.push(db.prepare(promoteSQL));
-    statements.push(db.prepare('INSERT INTO admin_actions(id,admin_id,action,target_id,reason,details,created_at) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),admin.userId,b.action,target,reason,details,now));
     const results=await db.batch(statements);
     if(!results[0].meta.changes)return json({error:'No change was made. The item may already be resolved, missing, or the credit adjustment would make its balance negative.'},409);
+    // Record the audit entry only after the guarded mutation actually changed a row.
+    try{await db.prepare('INSERT INTO admin_actions(id,admin_id,action,target_id,reason,details,created_at) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),admin.userId,b.action,target,reason,details,now).run();}catch{console.error('Administrative audit entry could not be saved.');}
     return json(await overview(db));
   } catch (e) {
     if (e instanceof z.ZodError) return json({ error: e.issues[0]?.message || 'Invalid request.' }, 400);
+    if (e instanceof SyntaxError) return json({ error: 'Invalid request.' }, 400);
     const err=e as Error&{status?:number;retryAfter?:number};if(err.status)return Response.json({error:err.message},{status:err.status,headers:{'Cache-Control':'no-store',...(err.retryAfter?{'Retry-After':String(err.retryAfter)}:{})}});
     console.error('Admin write:', e);
     return json({ error: 'Could not complete that admin action.' }, 503);

@@ -236,8 +236,9 @@ try{
  const creditsBefore=(await query("SELECT COUNT(*) AS n FROM credit_events WHERE user_id='alice'")).rows[0].n;
  ok((await adminAction('alice',{action:'grantCredits',userId:'alice',amount:-1000,reason:'Test rejection of an excessive deduction.'})).status===409,'admin cannot create a negative credit balance');
  ok((await query("SELECT credits FROM profiles WHERE id='alice'")).rows[0].credits===balance&&(await query("SELECT COUNT(*) AS n FROM credit_events WHERE user_id='alice'")).rows[0].n===creditsBefore,'rejected adjustment changes neither balance nor credit ledger');
- const audit=(await adminRead('alice',{collection:'audit',limit:'2'})).data;
- ok(audit.items.length===2&&!!audit.nextCursor&&audit.items.every(x=>x.adminId==='alice'&&!('body' in x)),'audit requests are paginated and do not copy message or manuscript text');
+ const audit=(await adminRead('alice',{collection:'audit',limit:'1'})).data;
+ ok(audit.items.length===1&&!!audit.nextCursor&&audit.items.every(x=>x.adminId==='alice'&&!('body' in x)),'audit requests are paginated and do not copy message or manuscript text');
+ ok((await query("SELECT COUNT(*)::int AS n FROM admin_actions WHERE action='grantCredits'")).rows[0].n===0,'a rejected admin action writes no audit entry');
  ok((await query("SELECT reason FROM admin_actions WHERE action='dismissReport'")).rows[0].reason.includes('no violation'),'audit includes the human decision reason');
  const privateBefore=(await query("SELECT status FROM works WHERE id='page-000'")).rows[0].status;
  ok((await adminAction('alice',{action:'withdrawWork',id:'page-000',reason:'Test private draft protection.'})).status===409&&(await query("SELECT status FROM works WHERE id='page-000'")).rows[0].status===privateBefore,'moderation withdrawal cannot change a private draft');

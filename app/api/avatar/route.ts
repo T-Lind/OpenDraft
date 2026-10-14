@@ -1,9 +1,11 @@
 import { database } from '@/db/storage';
 import { avatarPng } from '@/lib/avatar';
+import { requestRateLimit } from '@/lib/rate-limit';
 export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get('id') || '';
   if (!id || id.length > 100) return new Response(null, { status: 404 });
+  try { await requestRateLimit(request, 'avatar', 120, 60_000); } catch { return new Response(null, { status: 429, headers: { 'Retry-After': '60' } }); }
   try {
     const photo = await database().prepare('SELECT image_data FROM profile_photos WHERE user_id=?').bind(id).first<{ image_data: string }>();
     if (!photo) return new Response(null, { status: 404 });

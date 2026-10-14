@@ -10,6 +10,8 @@ Reading and moderation: a block between either critique participant now hides th
 
 Infrastructure: the shared advisory lock is dropped from independent single-user batches (critique drafts, replies, reading preferences, auth tokens, reminder materialization) so they no longer serialize behind publishing; the SQL binder now rejects a placeholder/bind-count mismatch instead of silently corrupting a literal `?`. Migration 0025 adds the missing `works(larger_work_id)` and `works(genre,status,created_at,id)` indexes and re-asserts three check constraints that existed in the database but were missing from `db/schema.ts`. Apply migration 0025 before running this code against an existing database.
 
+Follow-up fixes: failed or rejected operator actions no longer record a false `admin_actions` entry, and a malformed admin request returns 400 instead of 503. Email verification now lands returning members on the dashboard rather than an empty view, and the sign-in dialog offers a resend-verification-email button after an unverified sign-in attempt. The consent screen shows the real policy version. Rich paste no longer bolds an entire Google Docs payload (its `<b style="font-weight:normal">` wrapper is honored). Sliced inline runs carry correct offsets; the admin account-review empty state is suppressed on error; a malformed stored showcase assessment can no longer crash the operator panel; and the public avatar endpoint is rate limited.
+
 # Workshop refinements (October 10, 2026)
 
 Terms version 2026-10-10.1 explains private server autosave for unfinished critiques, conversations, and larger-work subscriptions. Updated acceptance is required before syncing feedback or sharing contributions.
