@@ -6,6 +6,10 @@ Follow-up: rejected/administrator-no-op actions no longer record a false `admin_
 
 Sign-up/hardening: landing CTAs open create-account mode; verification-failure redirects get specific copy; registration conflicts offer a switch to sign-in; onboarding explains the five-genre cap. Logout is POST-only with an Origin check (`components/sign-out.tsx` posts and reloads); `tests/auth.integration.mjs` now calls `logout.POST`. Public author and reputation lookups are rate limited; invalid admin `id` returns 400.
 
+# Credit-check resilience (October 14, 2026)
+
+Terms version 2026-10-14.1 (updated acceptance required). Reading visibility is now advisory: still measured and exported, but it no longer gates credits. When the automated evaluator is unavailable (Gateway outage or no evaluator configured), `lib/critique-fallback.ts` applies a conservative structural decision (>=175 words, bounded exact repetition, rationale for cuts/additions) without transmitting text; the assessment is marked `fallback` in `critique_credit_checks`. `OPENDRAFT_STRUCTURAL_FALLBACK=false` restores the strict "keep the draft and retry" 503. No migration. Tests: `tests/critique-fallback.test.mjs` (unit) plus fallback/operator-override and advisory-reading assertions in `tests/workshop.integration.mjs` and `tests/requested-credits.integration.mjs`.
+
 # Workshop refinements (October 10, 2026)
 
 Terms version 2026-10-10.1 explains private server autosave for unfinished critiques, conversations, and larger-work subscriptions. Updated acceptance is required before syncing feedback or sharing contributions.

@@ -12,7 +12,8 @@ import { promoteSQL } from '@/lib/reading-room';
 import {emailPasswordConfigured} from '@/lib/password-auth';
 import { changeReservation, availableCritiqueSlot } from '@/lib/critique-reservations';
 import { circleProjection, changeCircleMembership, manageCircle } from '@/lib/circle-access';
-import { engagementInput,inspectCritique,manuscriptParagraphs,validQualityNote,readingComplete } from '@/lib/critique-quality';
+import { engagementInput,inspectCritique,manuscriptParagraphs,validQualityNote } from '@/lib/critique-quality';
+import { evaluateCritiqueStructurally, structuralFallbackEnabled } from '@/lib/critique-fallback';
 import {evaluateCritique} from '@/lib/jev';
 import {MIN_CRITIQUE_WORDS,critiqueState} from '@/lib/critique-rubric';
 import {scheduleWorkEmails} from '@/lib/work-updates';
@@ -281,19 +282,23 @@ export async function POST(request: Request) {
       if (await db.prepare('SELECT id FROM reviews WHERE work_id=? AND user_id=? AND version=?').bind(r.workId, uid, w.version).first()) bad('You have already critiqued this version.', 409);
       // Composer/client scores never authorize credits. Include legacy passage comments.
       const draft={overall:r.overall+(r.annotation?'\n\n'+(r.quote?'Selected passage: '+r.quote+'\n':'')+r.annotation:''),strengths:r.strengths,suggestions:r.suggestions,annotations:r.annotations};
-      let assessment:Awaited<ReturnType<typeof evaluateCritique>>|null=null;
+      let assessment:Awaited<ReturnType<typeof evaluateCritique>>|ReturnType<typeof evaluateCritiqueStructurally>|null=null;
       let fingerprint='';
-      const readingPassed=readingComplete(r.engagement);
       if(!r.withoutCredits&&w.status!=='spotlight')bad('This work has left the reading room. Your draft is safe; confirm sharing without credits.',409);
       if(!r.withoutCredits&&count<MIN_CRITIQUE_WORDS)bad(`Credit eligibility requires at least 175 words; this critique has ${count}. Add detail or confirm sharing without credits.`,409);
-      if(!r.withoutCredits&&!readingPassed)bad('Focused manuscript visibility is incomplete. Return to the text with this tab active, or confirm sharing without credits. Visibility does not prove comprehension.',409);
-      if(!r.withoutCredits&&count>=MIN_CRITIQUE_WORDS){
+      if(!r.withoutCredits){
         if(!w.jev_review_available)bad('Credits require a quality check after the writer accepts the workshop terms. Your critique draft is safe.',403);
         // Separate final-check budget: composer cadence must not block sharing.
         await rateLimit(db,'critique-credit-check:'+uid,60,86400000);
         await rateLimit(db,'critique-credit-check-global',1000,86400000);
         try{assessment=await evaluateCritique(w.content,w.request,draft,process.env.VERCEL==='1'?request.headers.get('x-vercel-oidc-token'):null,w);}
-        catch{bad('The final quality credit check is unavailable. Your critique has not been posted and your draft is safe. Please try again.',503);}
+        catch{
+          // An evaluator outage must not freeze the exchange. Fall back to a
+          // conservative structural check (no text transmitted, marked for audit),
+          // unless the operator explicitly requires the automated evaluator.
+          if(!structuralFallbackEnabled())bad('The final quality credit check is unavailable. Your critique has not been posted and your draft is safe. Please try again.',503);
+          assessment=evaluateCritiqueStructurally(w.content,draft,count);
+        }
         const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({version:w.version,state:critiqueState(w.content,w.request,draft,w)})));
         fingerprint=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
         if(!assessment.credit.eligible)bad('The critique has not met the quality requirement: every category must reach 2/4 and the average must exceed 2/4. Review your scores and revise, or confirm sharing without credits.',409);

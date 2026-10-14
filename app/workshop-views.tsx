@@ -40,7 +40,6 @@ import {MIN_CRITIQUE_WORDS,CRITIQUE_CREDIT_RULE} from '@/lib/critique-rubric';
 import {TERMS_VERSION} from '@/lib/workshop-policy';
 import {useReviewEngagement} from '@/hooks/use-review-engagement';
 import {useFocusMode} from '@/hooks/use-focus-mode';
-import {readingComplete} from '@/lib/critique-quality';
 
 function FieldSelect({ label, value, options, change }: { label: string; value: string; options: string[]; change: (v: string) => void }) {
   return <label className="field-label">{label}<select className="form-select" value={value} onChange={e => change(e.target.value)}>{options.map(o => <option key={o}>{o}</option>)}</select></label>;
@@ -594,15 +593,15 @@ export function Reader({ work: w, data, act, busy, back, onSignIn, onAuthor,onRe
   };
   const totalWords = wordCount(form.overall + ' ' + form.strengths + ' ' + form.suggestions + ' ' + localAnnotations.map(a => a.body).join(' '));
   const sync=useSyncedCritique(w.id,w.version,canAnnotate&&data.user?.termsVersion===TERMS_VERSION,critiqueDraft,restored=>{const next={overall:restored.overall,strengths:restored.strengths,suggestions:restored.suggestions};const notes=restored.annotations.map(a=>({...a,id:'local-'+crypto.randomUUID(),workId:w.id,userId:uid||'',author:data.user?.name||'You',createdAt:Date.now()})) as WorkAnnotation[];setForm(next);setHistory(annotationHistory(notes));try{localStorage.setItem(key,JSON.stringify({...next,annotations:notes,workId:w.id,title:w.title,version:w.version,updatedAt:Date.now()}));}catch{setCritiqueStorageAvailable(false);}});
-  const readiness=creditReadiness(w.status==='spotlight',totalWords,engagement.summary,critiqueCheck,qualityEnabled);
+  const readiness=creditReadiness(w.status==='spotlight',totalWords,critiqueCheck,qualityEnabled);
   const valid = totalWords > 0;
   const inRoom = w.status === 'spotlight';
   const baseCredit = inRoom ? 1 : 0;
   const perWord = inRoom ? 0.005 : 0;
   const reward = totalWords < MIN_REVIEW_WORDS ? 0 : Math.round((baseCredit + (totalWords - MIN_REVIEW_WORDS) * perWord) * 1000) / 1000;
   const [confirmNoCredits,setConfirmNoCredits]=useState(false);
-  const allGreen=readingComplete(engagement.summary)&&critiqueCheck.current?.result?.credit.eligible===true;
-  const submit = async (withoutCredits=false) => { if(!withoutCredits&&(!inRoom||totalWords<MIN_REVIEW_WORDS||!allGreen)){setConfirmNoCredits(true);return;} const payload = { ...form, withoutCredits, attested:true, workId: w.id,version:w.version, ...(engagement.summary?{engagement:engagement.summary}:{}), annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, 'Critique shared.')) { try{localStorage.removeItem(key);sessionStorage.removeItem(key);}catch{/* The server submission succeeded even if tab storage is unavailable. */} sync.pause();setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory()); engagement.clear(); setFeedbackTab('All feedback'); } };
+  const allGreen=critiqueCheck.current?.result?.credit.eligible===true;
+  const submit = async (withoutCredits=false) => { const qualityIneligible=critiqueCheck.current?.result?.credit.eligible===false; if(!withoutCredits&&(!inRoom||totalWords<MIN_REVIEW_WORDS||qualityIneligible)){setConfirmNoCredits(true);return;} const payload = { ...form, withoutCredits, attested:true, workId: w.id,version:w.version, ...(engagement.summary?{engagement:engagement.summary}:{}), annotations: localAnnotations.map(a => ({ kind: a.kind, quote: a.quote, body: a.body, para: a.para, start: a.start, end: a.end })) }; if (await act({ action: 'review', review: payload }, 'Critique shared.')) { try{localStorage.removeItem(key);sessionStorage.removeItem(key);}catch{/* The server submission succeeded even if tab storage is unavailable. */} sync.pause();setForm({ overall: '', strengths: '', suggestions: '' }); setHistory(annotationHistory()); engagement.clear(); setFeedbackTab('All feedback'); } };
   const saved = data.bookmarks.includes(w.id);
 
   const serverAnnotations: WorkAnnotation[] = (data.annotations || []).filter(a => a.workId === w.id).map(a => ({ ...a, start: a.startPos ?? a.start, end: a.endPos ?? a.end }));

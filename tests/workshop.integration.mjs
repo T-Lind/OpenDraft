@@ -39,12 +39,12 @@ try{
  const sessionTime=Math.floor(Date.now()/1000);
  const user=id=>({userId:id,email:id+'@opendraft.test',fullName:id,displayName:id,issuedAt:sessionTime});
  const prepared=new Set();
- const read=async(id)=>identity.run(id?user(id):null,async()=>{const r=await api.GET();const data=await r.json();if(id&&!prepared.has(id)&&r.status===200){await query("UPDATE profiles SET terms_version='2026-10-10.1',terms_accepted_at=$1,onboarding_completed=CASE WHEN id='new-google-user' THEN false ELSE true END WHERE id=$2",[Date.now(),id]);prepared.add(id);}return{status:r.status,data}});
+ const read=async(id)=>identity.run(id?user(id):null,async()=>{const r=await api.GET();const data=await r.json();if(id&&!prepared.has(id)&&r.status===200){await query("UPDATE profiles SET terms_version='2026-10-14.1',terms_accepted_at=$1,onboarding_completed=CASE WHEN id='new-google-user' THEN false ELSE true END WHERE id=$2",[Date.now(),id]);prepared.add(id);}return{status:r.status,data}});
  const action=async(id,body,origin='https://opendraft.test')=>identity.run(id?user(id):null,async()=>{if(id&&!prepared.has(id))await read(id);if(body.action==='review'&&body.review.version===undefined){const current=(await query('SELECT version FROM works WHERE id=$1',[body.review.workId])).rows[0];body={...body,review:{...body.review,version:current?.version||1}};}if(body.action==='review'){
  const text=[body.review.overall,body.review.strengths,body.review.suggestions,body.review.annotation,...(body.review.annotations||[]).map(a=>a.body)].filter(Boolean).join(' ');
  const target=(await query('SELECT status FROM works WHERE id=$1',[body.review.workId])).rows[0];
  body={...body,review:{engagement:{consent:true,version:body.review.version||1,activeMs:36000,readingMs:36000,regionsMs:Array(12).fill(3000)},withoutCredits:text.trim().split(/\s+/).length<175||target?.status!=='spotlight',...body.review}};
- }if(body.action==='completeOnboarding')body={...body,acceptedTerms:true,termsVersion:'2026-10-10.1'};const r=await api.POST(new Request('https://opendraft.test/api/workshop',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)}));return{status:r.status,data:await r.json()}});
+ }if(body.action==='completeOnboarding')body={...body,acceptedTerms:true,termsVersion:'2026-10-14.1'};const r=await api.POST(new Request('https://opendraft.test/api/workshop',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)}));return{status:r.status,data:await r.json()}});
  const passwordAction=async body=>{const response=await passwordAuth.POST(new Request('https://opendraft.test/api/auth/password',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://opendraft.test'},body:JSON.stringify(body)}));return{status:response.status,data:await response.json()}};
  const work=(id,title='Test draft')=>({id,title,genre:'Literary fiction',kind:'Short story',stage:'First draft',content:'An original integration-test passage. Nothing here belongs in the live workshop.',request:'Does the opening engage the reader?',warning:''});
  const critique=id=>({action:'review',review:{workId:id,strengths:'The opening image gives the reader a clear place to stand. The quiet domestic details establish the relationship without exposition, and the dialogue makes the conflict feel specific. I especially liked the repeated image because it provides a thread through the scene.',suggestions:'I would give the middle of the scene a little more room to breathe. One additional concrete detail about the narrator’s reaction might connect the physical setting to the underlying tension. Consider varying the sentence lengths so the strongest emotional beat has more space.',overall:'The story has a confident voice and an engaging central question. In another draft I would focus on the transition into the ending, while preserving the restrained tone and the precise visual details.',quote:'',annotation:'',processDisclosure:'human-only',attested:true}});
@@ -313,7 +313,7 @@ try{
   ok((await checkThemes(null,{content:'Synthetic draft'})).status===401,'theme checks require authentication');
   await query("UPDATE profiles SET terms_version='old' WHERE id='alice'");
   ok((await checkThemes('alice',{content:'Synthetic draft'})).status===428&&modelCalls===0,'theme checks require current workshop terms');
-  await query("UPDATE profiles SET terms_version='2026-10-10.1' WHERE id='alice'");
+  await query("UPDATE profiles SET terms_version='2026-10-14.1' WHERE id='alice'");
   ok((await checkThemes('alice',{content:'Synthetic draft'},'https://evil.test')).status===403&&modelCalls===0,'theme checks reject cross-origin requests');
   const checked=await checkThemes('alice',{content:'Synthetic draft'});
   ok(checked.status===200&&checked.data.suggestions.some(s=>s.theme==='Violence'&&!s.uncertain)&&checked.data.suggestions.some(s=>s.theme==='Trauma'&&s.uncertain),'fixed model rubrics yield advisory labels and uncertainty');
@@ -333,7 +333,7 @@ try{
  await query("UPDATE profiles SET terms_version='' WHERE id='friend-c'");
  ok((await cAction('friend-c',{action:'friendRequest',id:'friend-a'})).status===428,'terms acceptance is required before sharing');
  ok((await cAction('friend-c',{action:'acceptTerms',accepted:true,version:'outdated'})).status===400,'outdated policy version is rejected');
- ok((await cAction('friend-c',{action:'acceptTerms',accepted:true,version:'2026-10-10.1'})).status===200,'member explicitly accepts current terms');
+ ok((await cAction('friend-c',{action:'acceptTerms',accepted:true,version:'2026-10-14.1'})).status===200,'member explicitly accepts current terms');
  ok((await cAction(null,{action:'friendRequest',id:'friend-a'})).status===401,'anonymous friendship changes denied');
  ok((await cAction('friend-a',{action:'settings',friendsOnly:true})).status===200,'friends-only message setting saves');
  ok((await action('friend-b',{action:'sendMessage',recipientId:'friend-a',body:'Hello, shall we discuss your story?'})).status===403,'friends-only messages reject nonfriends');
@@ -416,7 +416,7 @@ try{
  ok((await cAction('revision-writer',{action:'showcaseConsent',id:'revision-parent',optIn:true,aiConsent:false})).status===200,'showcase participation is optional');
  await query("UPDATE profiles SET terms_version='old' WHERE id='revision-writer'");
  ok((await cAction('alice',{action:'evaluateShowcase',id:'revision-parent'})).status===403,'Jev requires writer acceptance of current workshop terms');
- await query("UPDATE profiles SET terms_version='2026-10-10.1' WHERE id='revision-writer'");
+ await query("UPDATE profiles SET terms_version='2026-10-14.1' WHERE id='revision-writer'");
  ok((await cAction('friend-a',{action:'pickShowcase',id:'revision-parent',day:today,note:'A carefully revised opening worth a close reading.'})).status===403,'only operator can select showcase');
  ok((await cAction('alice',{action:'pickShowcase',id:'revision-parent',day:today,note:'A carefully revised opening worth a close reading.'})).status===200,'operator can choose a human-only showcase');
  ok((await cRead(null,{section:'showcase'})).data.showcase.id==='revision-parent','today showcase appears through bounded public lookup');
@@ -566,10 +566,15 @@ try{
  ok((await action('gate-anchor',{action:'review',review:{...fullCritique('credit-gate-fixture').review,annotations:[{kind:'comment',quote:'Fabricated',body:'Not actually present',para:0,start:0,end:10}]}})).status===400,'final submission checks text anchors before evaluation');
  ok(creditTest.creditCalls.length===beforeDenied,'invalid requests never consume final model budget');
  creditTest.creditError=true;
- r=await gateReview('gate-outage');ok(r.status===503&&r.data.error.includes('draft is safe'),'provider failure preserves the draft instead of bypassing credit gate');
- ok((await query("SELECT COUNT(*)::int AS n FROM reviews WHERE user_id='gate-outage'")).rows[0].n===0,'outage creates no posted review or consumed critique slot');
+ r=await gateReview('gate-outage');ok(r.status===200&&r.data.user.credits===6,'an evaluator outage falls back to a structural credit check instead of freezing the exchange');
+ const outageCheck=JSON.parse((await query("SELECT assessment FROM critique_credit_checks WHERE user_id='gate-outage'")).rows[0].assessment);
+ ok(outageCheck.fallback===true&&outageCheck.rubric==='critique-structure-fallback-v1','the outage assessment is marked as a structural fallback for operator audit');
  creditTest.creditError=false;
- r=await gateReview('gate-outage');ok(r.status===200&&r.data.user.credits===6,'retry after provider recovery awards exactly once');
+ process.env.OPENDRAFT_STRUCTURAL_FALLBACK='false';
+ creditTest.creditError=true;
+ r=await gateReview('gate-strict');ok(r.status===503&&r.data.error.includes('draft is safe'),'an operator can require the automated evaluator instead of the structural fallback');
+ ok((await query("SELECT COUNT(*)::int AS n FROM reviews WHERE user_id='gate-strict'")).rows[0].n===0,'strict mode posts no review during an outage');
+ creditTest.creditError=false;delete process.env.OPENDRAFT_STRUCTURAL_FALLBACK;
  const originalGateText=(await query("SELECT content FROM works WHERE id='credit-gate-fixture'")).rows[0].content;
  creditTest.creditHook=()=>query("UPDATE works SET content=content||' A changed sentence.' WHERE id='credit-gate-fixture'");
  r=await gateReview('gate-changing');ok(r.status===409,'text changing during model call invalidates submission even at the same version');
@@ -579,7 +584,7 @@ try{
  await query("UPDATE profiles SET terms_version='old' WHERE id='alice'");
  const beforeTerms=creditTest.creditCalls.length;
  ok((await gateReview('gate-terms')).status===403&&creditTest.creditCalls.length===beforeTerms,'outdated author terms prevent final model transmission');
- await query("UPDATE profiles SET terms_version='2026-10-10.1' WHERE id='alice'");
+ await query("UPDATE profiles SET terms_version='2026-10-14.1' WHERE id='alice'");
  await action('gate-legacy',{action:'review',review:{...fullCritique('credit-gate-fixture').review,annotation:'Legacy selected-passage advice must also be evaluated.',quote:'The light'}});
  ok(creditTest.creditCalls.at(-1).draft.overall.includes('Legacy selected-passage advice'),'legacy selected-passage comment is included in final assessment');
  const gateExport=await identity.run(user('gate-above'),()=>exportAPI.GET());
@@ -598,9 +603,8 @@ try{
  ok((await action('pilot-reader',pilotInput)).status===400,'inconsistent attention data is rejected');
  pilotInput.review.engagement=summary;
  r=await action('pilot-reader',pilotInput);
- ok(r.status===409&&r.data.error.includes('visibility'),'incomplete reading checks block credit-bearing submission');
- pilotInput.review.withoutCredits=true;r=await action('pilot-reader',pilotInput);
- ok(r.status===200&&r.data.user.credits===5,'incomplete reading checks can be explicitly shared without credits');
+ ok(r.status===200&&Math.abs(r.data.user.credits-(5+spotlightReward))<0.00001,'advisory reading visibility does not block credit-bearing submission');
+ ok((await query("SELECT COUNT(*)::int AS n FROM critique_evidence WHERE user_id='pilot-reader'")).rows[0].n===1,'the advisory reading summary is still stored as private evidence');
  const pilotRecord=(await query("SELECT * FROM critique_evidence WHERE user_id='pilot-reader'")).rows[0];
  ok(!!pilotRecord&&JSON.parse(pilotRecord.evidence).quality.rubric==='critique-structure-v1','opt-in summary and server-derived structure check save atomically');
  ok(!('critiquePilot' in r.data)&&!r.data.reviews.some(review=>'engagement' in review||'evidence' in review),'private pilot summaries never leak into public snapshots');
@@ -609,11 +613,12 @@ try{
  const pilotExport=await identity.run(user('pilot-reader'),()=>exportAPI.GET());
  const pilotExportData=await pilotExport.json();
  ok(pilotExportData.critiquePilot.some(item=>item.id===pilotRecord.id),'reviewer export includes pilot evidence');
- ok(!pilotExportData.critiqueCreditChecks.some(item=>item.id===pilotRecord.id),'confirmed zero-credit feedback has no paid score audit');
+ ok(pilotExportData.critiqueCreditChecks.some(item=>item.id===pilotRecord.id),'a credit-earning review exports its private score audit');
  const authorExport=await identity.run(user('pilot-author'),()=>exportAPI.GET());
  ok(!(await authorExport.json()).critiquePilot.length,'work author export cannot expose reviewer timing');
  const noPilot=await action('no-pilot-reader',{action:'review',review:{...fullCritique('pilot-fixture').review,engagement:undefined,withoutCredits:true}});
  ok(noPilot.status===200&&(await query("SELECT COUNT(*)::int AS n FROM critique_evidence WHERE user_id='no-pilot-reader'")).rows[0].n===0,'confirmed zero-credit sharing needs no reading summary');
+ ok((await query("SELECT COUNT(*)::int AS n FROM critique_credit_checks WHERE user_id='no-pilot-reader'")).rows[0].n===0,'confirmed zero-credit feedback has no paid score audit');
  const critiqueCheck=await import('../.sites-runtime/tests/critiqueCheck.mjs');
  const checkCritique=async(uid,body,origin='https://opendraft.test')=>identity.run(uid?user(uid):null,async()=>{const response=await critiqueCheck.POST(new Request('https://opendraft.test/api/critique-check',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(body)}));return{status:response.status,data:await response.json()};});
  const checkBody={workId:'pilot-fixture',version:1,draft:{overall:'The opening kitchen image establishes a promise that the final scene leaves unresolved.',strengths:'',suggestions:'',annotations:[]}};
@@ -624,10 +629,10 @@ try{
   ok((await checkCritique(null,checkBody)).status===401,'critique model check requires sign-in');
   await query("UPDATE profiles SET terms_version='old' WHERE id='pilot-author'");
   ok((await checkCritique('pilot-reader',checkBody)).status===403&&critiqueCalls===0,'writer must accept current workshop terms');
-  await query("UPDATE profiles SET terms_version='2026-10-10.1' WHERE id='pilot-author'");
+  await query("UPDATE profiles SET terms_version='2026-10-14.1' WHERE id='pilot-author'");
   await query("UPDATE profiles SET terms_version='old' WHERE id='pilot-reader'");
   ok((await checkCritique('pilot-reader',checkBody)).status===428&&critiqueCalls===0,'reviewer must accept current workshop terms');
-  await query("UPDATE profiles SET terms_version='2026-10-10.1' WHERE id='pilot-reader'");
+  await query("UPDATE profiles SET terms_version='2026-10-14.1' WHERE id='pilot-reader'");
   ok((await checkCritique('pilot-reader',checkBody,'https://evil.test')).status===403&&critiqueCalls===0,'cross-origin model requests are denied');
   ok((await checkCritique('pilot-reader',{...checkBody,version:2})).status===409&&critiqueCalls===0,'model checks enforce manuscript version');
   const validNote={kind:'comment',quote:'The light',body:'This opening image gives the house a lingering sense of promise.',para:0,start:0,end:9};

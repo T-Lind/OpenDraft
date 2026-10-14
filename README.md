@@ -14,6 +14,15 @@ Follow-up fixes: failed or rejected operator actions no longer record a false `a
 
 Sign-up and hardening follow-up: the landing “Join OpenDraft” and “Start writing” calls-to-action open the dialog in create-account mode, verification-failure redirects show specific guidance, a 409 from registration offers a one-click switch to sign-in, and onboarding explains the five-genre cap. Sign-out is now a same-origin POST (`/api/auth/logout`) so a cross-site link cannot end a session; the public author profile and reputation lookups are rate limited, and an invalid admin `id` returns 400 instead of 503.
 
+# Credit-check resilience (October 14, 2026)
+
+Terms version 2026-10-14.1. Two policy changes, both requiring updated acceptance:
+
+- Focused reading visibility is now advisory. It is still measured privately for operator review and the reviewer's export, but it no longer affects credit eligibility or blocks a credit-bearing submission. The 175-word floor, reading-room status, and the quality check still apply.
+- When the automated evaluator is unavailable — a Vercel AI Gateway outage or a deployment with no evaluator configured — a conservative structural check decides credit eligibility without transmitting manuscript text. It requires at least 175 words, limits exact repetition, and requires rationale for proposed cuts or additions; each fallback decision is marked in the private credit audit. Operators can require the automated evaluator instead with `OPENDRAFT_STRUCTURAL_FALLBACK=false`, restoring the previous "keep the draft and retry" behavior. This keeps the exchange earning credits for self-hosted deployments that do not use Vercel AI Gateway.
+
+No schema change is required; reading summaries and fallback assessments use existing tables.
+
 # Workshop refinements (October 10, 2026)
 
 Terms version 2026-10-10.1 explains private server autosave for unfinished critiques, conversations, and larger-work subscriptions. Updated acceptance is required before syncing feedback or sharing contributions.
@@ -60,12 +69,12 @@ showcase choices remain human.
 
 ## What works
 
-- Focused manuscript visibility is measured privately for credit eligibility. Hidden and idle time is excluded; each of twelve regions must be visible for at least three seconds. Visibility cannot prove comprehension. Browser-local summaries are exported to the reviewer and removed on discard, submission, or account cleanup.
+- Focused manuscript visibility is measured privately and is advisory: it no longer affects credit eligibility and does not prove comprehension. Hidden and idle time is excluded. Browser-local summaries are exported to the reviewer and removed on discard, submission, or account cleanup.
 - Automatic Jev critique checks under the current writer/reviewer workshop terms (grounding, relevance, rationale, usefulness).
   Checks send manuscript/request/critique/line notes through the existing no-training
   TypeSafe-only Gateway route. Results are ephemeral and invalidate on edits.
-  No automatic moderation penalties or public reputation changes are enabled. New earning critiques require 175 words, a fresh server Jev average strictly above 2/4, and every category at least 2/4. Final private decisions are exported to the reviewer and removed on either participant’s deletion. Composer scores never authorize rewards.
-  Apply migrations through `0024_workshop-refinements` before running this code against
+  No automatic moderation penalties or public reputation changes are enabled. New earning critiques require 175 words, reading-room status, and a fresh server Jev average strictly above 2/4 with every category at least 2/4. If the evaluator is unavailable, a conservative structural check decides eligibility without transmitting manuscript text, unless `OPENDRAFT_STRUCTURAL_FALLBACK=false` requires the evaluator. Final private decisions are exported to the reviewer and removed on either participant’s deletion. Composer scores never authorize rewards.
+  Apply migrations through `0025_previous_magik` before running this code against
   a new database. Production Neon is current; the isolated preview on port 5182 uses no live data.
 
 - Phone-first five-destination navigation (Home, Read, Write, Inbox, More), labeled
